@@ -1,0 +1,47 @@
+# ── Core Framework ──────────────────────────────────────────
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+python-multipart
+python-dotenv
+httpx
+
+# ── Database ────────────────────────────────────────────────
+sqlalchemy
+psycopg2-binary
+alembic
+
+# ── Auth ────────────────────────────────────────────────────
+PyJWT
+passlib[bcrypt]
+bcrypt
+
+# ── AI / LLM ───────────────────────────────────────────────
+langgraph
+langchain
+langchain-community
+langchain-core
+langchain-huggingface==0.0.3
+huggingface_hub
+
+# ── Retrieval ───────────────────────────────────────────────
+faiss-cpu
+rank_bm25
+sentence-transformers
+
+# ── Document Processing ────────────────────────────────────
+pypdf
+
+# ── Infrastructure Clients ─────────────────────────────────
+redis
+neo4j
+supabase
+celery
+
+# ── Observability ──────────────────────────────────────────
+prometheus-fastapi-instrumentator
+
+# ── Rate Limiting ──────────────────────────────────────────
+slowapi
+requests
