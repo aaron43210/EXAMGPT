@@ -11,25 +11,25 @@ class Settings(BaseSettings):
     # ── App ─────────────────────────────────────────────────────
     APP_NAME: str = "ExamGPT"
     DEBUG: bool = True
-    SECRET_KEY: str = "REDACTED_SECRET_KEY"
+    SECRET_KEY: str = "changeme-generate-a-real-secret-key"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # ── PostgreSQL ──────────────────────────────────────────────
-    DATABASE_URL: str = "postgresql://postgres:REDACTED_PASSWORD@db.pyjwdqvrhbmulscjapbr.supabase.co:5432/postgres"
+    DATABASE_URL: str = ""
 
     # ── Redis ───────────────────────────────────────────────────
-    REDIS_URL: str = "redis://default:REDACTED_PASSWORD@simple-beetle-140985.upstash.io:6379"
+    REDIS_URL: str = ""
 
     # ── Neo4j ───────────────────────────────────────────────────
-    NEO4J_URI: str = "neo4j+s://9ec2908b.databases.neo4j.io"
-    NEO4J_USER: str = "9ec2908b"
-    NEO4J_PASSWORD: str = "g6jAqrD38VW46e5aAykME2WLx13WKZLXJj1zd4NrS_o"
+    NEO4J_URI: str = ""
+    NEO4J_USER: str = "neo4j"
+    NEO4J_PASSWORD: str = ""
 
     # ── Supabase Storage ────────────────────────────────────────
-    SUPABASE_URL: str = "https://pyjwdqvrhbmulscjapbr.supabase.co"
-    SUPABASE_KEY: str = "REDACTED_SUPABASE_KEY"
+    SUPABASE_URL: str = ""
+    SUPABASE_KEY: str = ""
     SUPABASE_BUCKET: str = "examgpt-docs"
 
     # ── Hugging Face Inference ──────────────────────────────────
