@@ -1,0 +1,12 @@
+# Binary/Data files - not for git
+uploads/
+vector_store/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.index
+.env
+*.pdf
+*.docx
