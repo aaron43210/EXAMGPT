@@ -34,7 +34,7 @@ class Settings(BaseSettings):
 
     # ── Hugging Face Inference ──────────────────────────────────
     HUGGINGFACE_API_KEY: str = ""
-    LLM_MODEL: str = "meta-llama/Meta-Llama-3-8B-Instruct"
+    LLM_MODEL: str = "HuggingFaceH4/zephyr-7b-beta"
     EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
 
     # ── Upload ──────────────────────────────────────────────────
