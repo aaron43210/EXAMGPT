@@ -1,6 +1,6 @@
 """
-LLM and embedding model setup via Ollama.
-Uses langchain_ollama (modern, non-deprecated API).
+LLM and embedding model setup via Hugging Face Inference API.
+Uses langchain_huggingface for cloud-based model access.
 """
 from langchain_huggingface import HuggingFaceEndpoint, HuggingFaceEndpointEmbeddings
 from app.core.config import get_settings
