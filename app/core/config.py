@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     # ── Upload ──────────────────────────────────────────────────
     MAX_UPLOAD_SIZE_MB: int = 20
     UPLOAD_DIR: str = "/app/uploads"
+    
+    # ── CORS ────────────────────────────────────────────────────
+    FRONTEND_URL: str = ""
 
     # ── Pipeline ────────────────────────────────────────────────
     MAX_EVAL_RETRIES: int = 3
