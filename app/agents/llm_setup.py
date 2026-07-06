@@ -12,7 +12,6 @@ def get_llm():
         repo_id=settings.LLM_MODEL,
         huggingfacehub_api_token=settings.HUGGINGFACE_API_KEY,
         temperature=0.2,
-        task="text-generation",
     )
 
 
