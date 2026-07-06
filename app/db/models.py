@@ -58,7 +58,7 @@ class Document(Base):
     filename = Column(String)
     doc_type = Column(String, default=DocumentType.notes.value)
     status = Column(String, default=DocumentStatus.uploaded.value)
-    file_url = Column(String, nullable=True)  # MinIO path
+    file_url = Column(String, nullable=True)  # Supabase Storage path
     course_id = Column(Integer, ForeignKey("courses.id"))
     user_id = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
