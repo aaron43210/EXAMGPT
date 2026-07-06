@@ -22,7 +22,7 @@ langgraph
 langchain
 langchain-community
 langchain-core
-langchain-huggingface==0.0.3
+langchain-huggingface
 huggingface_hub
 
 # ── Retrieval ───────────────────────────────────────────────
