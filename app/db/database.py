@@ -5,7 +5,12 @@ from app.core.config import get_settings
 
 settings = get_settings()
 
-engine = create_engine(settings.DATABASE_URL)
+from sqlalchemy.pool import NullPool
+
+engine = create_engine(
+    settings.DATABASE_URL,
+    poolclass=NullPool,
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
