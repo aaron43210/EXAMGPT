@@ -98,7 +98,7 @@ def run_examgpt_query(
         elapsed_ms = (time.time() - start) * 1000
         logger.error(f"Pipeline failed after {elapsed_ms:.0f}ms: {e}", exc_info=True)
         return {
-            "answer": f"I apologize, but I encountered an error processing your question. Please try again.",
+            "answer": f"Error: {str(e)}",
             "citations": [],
             "evaluation": {"passed": False, "feedback": str(e)},
             "retry_count": 0,
