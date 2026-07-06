@@ -76,9 +76,6 @@ def readiness():
 @app.on_event("startup")
 async def startup_event():
     logger.info("ExamGPT API starting up...")
-    logger.info(f"Ollama URL: {settings.OLLAMA_BASE_URL}")
-    logger.info(f"LLM Model: {settings.LLM_MODEL}")
-    logger.info(f"Embedding Model: {settings.EMBEDDING_MODEL}")
 
     # Try to initialize Neo4j schema
     try:
@@ -88,13 +85,13 @@ async def startup_event():
     except Exception as e:
         logger.warning(f"Neo4j not available (optional): {e}")
 
-    # Try to initialize MinIO bucket
+    # Try to initialize Supabase client
     try:
-        from app.core.minio_client import get_minio_client
-        get_minio_client()
-        logger.info("MinIO bucket ready")
+        from app.core.supabase_client import get_supabase_client
+        get_supabase_client()
+        logger.info("Supabase client ready")
     except Exception as e:
-        logger.warning(f"MinIO not available (optional): {e}")
+        logger.warning(f"Supabase not available (optional): {e}")
 
     logger.info("ExamGPT API ready!")
 
