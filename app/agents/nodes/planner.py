@@ -36,10 +36,12 @@ def planner_node(state: PipelineState) -> dict:
     query = state["user_query"]
 
     response = llm.invoke(PLANNER_PROMPT.format(query=query))
+    # ChatHuggingFace returns an AIMessage object; extract string content
+    response_text = response.content if hasattr(response, "content") else str(response)
 
     # Parse LLM response
     try:
-        plan_data = json.loads(response.strip())
+        plan_data = json.loads(response_text.strip())
         subtasks = plan_data.get("subtasks", [query])
         topics = plan_data.get("topics", [])
     except (json.JSONDecodeError, AttributeError):

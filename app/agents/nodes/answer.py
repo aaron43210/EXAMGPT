@@ -77,7 +77,9 @@ def answer_node(state: PipelineState) -> dict:
         feedback=feedback,
     )
 
-    draft_answer = llm.invoke(prompt)
+    response = llm.invoke(prompt)
+    # ChatHuggingFace returns an AIMessage object; extract string content
+    draft_answer = response.content if hasattr(response, "content") else str(response)
 
     # Build citations list
     citations = []

@@ -61,9 +61,11 @@ def evaluation_node(state: PipelineState) -> dict:
     )
 
     response = llm.invoke(prompt)
+    # ChatHuggingFace returns an AIMessage object; extract string content
+    response_text = response.content if hasattr(response, "content") else str(response)
 
     try:
-        eval_data = json.loads(response.strip())
+        eval_data = json.loads(response_text.strip())
         passed = eval_data.get("passed", True)
         feedback = eval_data.get("feedback", "No feedback")
         score = eval_data.get("score", 5)
