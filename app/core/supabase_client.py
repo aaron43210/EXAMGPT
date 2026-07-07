@@ -2,17 +2,32 @@
 Supabase client for cloud storage.
 Handles file upload to Supabase Storage Buckets.
 """
+import logging
 from supabase import create_client, Client
 from app.core.config import get_settings
 
 _supabase_client = None
-
+logger = logging.getLogger(__name__)
 
 def get_supabase_client() -> Client:
     global _supabase_client
     if _supabase_client is None:
         settings = get_settings()
+        if not settings.SUPABASE_URL or not settings.SUPABASE_KEY:
+            raise ValueError("SUPABASE_URL or SUPABASE_KEY is missing")
+            
         _supabase_client = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+        
+        # Ensure bucket exists
+        try:
+            buckets = _supabase_client.storage.list_buckets()
+            bucket_names = [b.name for b in buckets]
+            if settings.SUPABASE_BUCKET not in bucket_names:
+                _supabase_client.storage.create_bucket(settings.SUPABASE_BUCKET, options={"public": False})
+                logger.info(f"Created missing Supabase bucket: {settings.SUPABASE_BUCKET}")
+        except Exception as e:
+            logger.warning(f"Could not check/create bucket: {e}")
+            
     return _supabase_client
 
 
