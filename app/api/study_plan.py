@@ -37,12 +37,14 @@ Total study hours: {total_hours}
 {pyq_text}
 
 ## IMPORTANT RULES
-1. Extract EVERY topic and subtopic from the documents above.
-2. Create a schedule where each day has specific topics assigned.
-3. Each day MUST list the exact topics to study with time allocation.
-4. For longer plans (>7 days), group into phases but still show daily breakdown.
-5. Include revision days and PYQ practice days near the end.
-6. Prioritize topics that appear in PYQs.
+1. ADAPT TO TIMEFRAME:
+   - If {days} is short (e.g., <= 7 days), compress the schedule to ONLY focus on major, high-priority topics. Skip minor details.
+   - If {days} is long (e.g., >= 30 days), create a comprehensive plan that covers every topic and subtopic in detail.
+2. The exact topics you schedule MUST be extracted from the uploaded documents above.
+3. Each day MUST list exact topics with time allocations totaling {hours_per_day} hours.
+4. For longer plans, group into phases but still provide the daily breakdown.
+5. ALWAYS use the Syllabus and Previous Year Questions (PYQs) as the source of truth for prioritizing topics.
+6. Include dedicated revision days and PYQ practice days near the end of the schedule.
 7. Provide 3 to 5 highly actionable, specific study tips on how to best tackle and complete this exact course material.
 
 Generate a JSON object with this EXACT structure:
