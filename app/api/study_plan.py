@@ -83,8 +83,11 @@ def _extract_text_from_doc(db_doc: Document) -> str:
     try:
         if db_doc.file_url and not db_doc.file_url.startswith("/"):
             from app.core.supabase_client import download_file
-            parts = db_doc.file_url.split("/", 1)
-            object_name = parts[1] if len(parts) > 1 else db_doc.file_url
+            # file_url could be 'bucket/courses/1/file.pdf' or just 'courses/1/file.pdf'
+            if "courses/" in db_doc.file_url:
+                object_name = "courses/" + db_doc.file_url.split("courses/", 1)[1]
+            else:
+                object_name = db_doc.file_url
             file_bytes = download_file(object_name)
             with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
                 tmp.write(file_bytes)
@@ -164,12 +167,17 @@ def generate_study_plan(
     response = llm.invoke(prompt)
     response_text = response.content if hasattr(response, "content") else str(response)
 
-    # Strip markdown code fences if present
+    # Extract JSON block even if wrapped in text
     response_text = response_text.strip()
-    if response_text.startswith("```"):
-        lines = response_text.split("\n")
-        lines = [l for l in lines if not l.strip().startswith("```")]
-        response_text = "\n".join(lines)
+    import re
+    match = re.search(r'```(?:json)?(.*?)```', response_text, re.DOTALL)
+    if match:
+        response_text = match.group(1).strip()
+    else:
+        start = response_text.find('{')
+        end = response_text.rfind('}')
+        if start != -1 and end != -1:
+            response_text = response_text[start:end+1]
 
     try:
         plan_data = json.loads(response_text.strip())
