@@ -14,19 +14,18 @@ from app.schemas.planner import StudyPlanRequest, StudyPlanResponse
 from app.core.security import get_current_user
 from app.agents.llm_setup import get_llm
 from app.ingestion.pdf_loader import PDFLoader
-from app.ingestion.chunker import Chunker
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-STUDY_PLAN_PROMPT = """You are ExamGPT, an expert academic study planner. Create a highly detailed, personalized study plan based on the ACTUAL course content extracted from the student's documents.
+STUDY_PLAN_PROMPT = """You are an expert academic study planner. Analyze the course content below and create a DAY-BY-DAY study schedule.
 
 Course: {course_name}
 Days until exam: {days}
 Hours per day: {hours_per_day}
 Total study hours: {total_hours}
 
-## Actual Course Content (extracted from uploaded documents)
+## Actual Course Content (from student's uploaded documents)
 
 ### Syllabus / Course Outline
 {syllabus_text}
@@ -37,40 +36,53 @@ Total study hours: {total_hours}
 ### Previous Year Questions
 {pyq_text}
 
-## Instructions
-Based on the REAL topics and content above, generate a comprehensive, specific study plan. Use the actual topic names from the documents — do NOT use generic placeholders like "topic 1" or "review all materials".
+## IMPORTANT RULES
+1. Extract EVERY topic and subtopic from the documents above.
+2. Create a schedule where each day has specific topics assigned.
+3. Each day MUST list the exact topics to study with time allocation.
+4. For longer plans (>7 days), group into phases but still show daily breakdown.
+5. Include revision days and PYQ practice days near the end.
+6. Prioritize topics that appear in PYQs.
 
-Generate a study plan as a JSON object:
+Generate a JSON object with this EXACT structure:
 {{
   "title": "Study Plan for {course_name}",
   "total_days": {days},
   "hours_per_day": {hours_per_day},
-  "phases": [
+  "schedule": [
     {{
-      "phase": 1,
-      "name": "Descriptive phase name based on real topics",
-      "days": "Day 1 - Day X",
-      "focus": "Specific topic from the syllabus",
-      "topics": ["Real topic A", "Real topic B"],
-      "activities": ["Read notes on [specific real topic]", "Solve PYQs from [year] on [topic]"],
-      "hours": 15
+      "day": 1,
+      "date_label": "Day 1",
+      "theme": "Introduction & Basics",
+      "topics": [
+        {{
+          "name": "Exact topic name from document",
+          "duration_hours": 1.5,
+          "activity": "Read notes + make summary",
+          "priority": "high"
+        }},
+        {{
+          "name": "Another specific topic",
+          "duration_hours": 2.0,
+          "activity": "Study concepts + solve examples",
+          "priority": "medium"
+        }}
+      ]
     }}
   ],
-  "tips": ["Tip specific to this course's content", "Another specific tip"],
-  "priority_topics": ["Most important real topic 1", "Real topic 2"]
+  "priority_topics": ["Most important topic 1", "Topic 2"],
+  "tips": ["Tip 1", "Tip 2"]
 }}
 
-Respond ONLY with the JSON, no other text."""
+RESPOND ONLY WITH THE JSON. No markdown, no code fences, just raw JSON."""
 
 
 def _extract_text_from_doc(db_doc: Document) -> str:
     """Download from Supabase or read from local path, extract text."""
     text = ""
     try:
-        # Try Supabase download first
         if db_doc.file_url and not db_doc.file_url.startswith("/"):
             from app.core.supabase_client import download_file
-            # file_url is like "bucket/courses/1/file.pdf"
             parts = db_doc.file_url.split("/", 1)
             object_name = parts[1] if len(parts) > 1 else db_doc.file_url
             file_bytes = download_file(object_name)
@@ -80,11 +92,10 @@ def _extract_text_from_doc(db_doc: Document) -> str:
             text = PDFLoader.extract_text(tmp_path)
             os.unlink(tmp_path)
         elif db_doc.file_url and os.path.exists(db_doc.file_url):
-            # Local file path
             text = PDFLoader.extract_text(db_doc.file_url)
     except Exception as e:
         logger.warning(f"Could not extract text from doc {db_doc.id}: {e}")
-    return text[:4000]  # Limit to avoid token overflow
+    return text[:4000]
 
 
 @router.post("/{course_id}/study-plan", response_model=StudyPlanResponse)
@@ -123,7 +134,7 @@ def generate_study_plan(
     notes_text = "\n\n---\n\n".join(notes_texts) if notes_texts else "No notes uploaded."
     pyq_text = "\n\n---\n\n".join(pyq_texts) if pyq_texts else "No PYQs uploaded."
 
-    # If no documents found, try hybrid retriever as fallback
+    # Fallback to hybrid retriever if no documents found
     if not syllabus_texts and not notes_texts:
         from app.retrieval.hybrid_retriever import hybrid_retriever
         syllabus_docs = hybrid_retriever.retrieve(
@@ -153,22 +164,31 @@ def generate_study_plan(
     response = llm.invoke(prompt)
     response_text = response.content if hasattr(response, "content") else str(response)
 
-    # Strip markdown code fences if LLM wraps the JSON
+    # Strip markdown code fences if present
     response_text = response_text.strip()
     if response_text.startswith("```"):
-        response_text = response_text.split("```")[1]
-        if response_text.startswith("json"):
-            response_text = response_text[4:]
+        lines = response_text.split("\n")
+        lines = [l for l in lines if not l.strip().startswith("```")]
+        response_text = "\n".join(lines)
 
     try:
         plan_data = json.loads(response_text.strip())
-    except (json.JSONDecodeError, AttributeError):
-        logger.warning("JSON parse failed for study plan, using fallback.")
+    except (json.JSONDecodeError, AttributeError) as e:
+        logger.warning(f"JSON parse failed for study plan: {e}")
+        logger.warning(f"Raw response (first 500 chars): {response_text[:500]}")
         plan_data = {
             "title": f"Study Plan for {course.name}",
             "total_days": request.days,
             "hours_per_day": request.hours_per_day,
-            "phases": [{"phase": 1, "name": "Full Course Review", "days": f"Day 1 - Day {request.days}", "focus": "Review all uploaded materials", "topics": [], "activities": ["Review notes", "Practice PYQs"], "hours": total_hours}],
+            "schedule": [
+                {
+                    "day": d + 1,
+                    "date_label": f"Day {d + 1}",
+                    "theme": "Study Session",
+                    "topics": [{"name": "Review uploaded materials", "duration_hours": request.hours_per_day, "activity": "Read and summarize", "priority": "medium"}],
+                }
+                for d in range(min(request.days, 7))
+            ],
             "tips": ["Upload your syllabus for a more detailed plan", "Practice PYQs regularly"],
             "priority_topics": [],
         }
