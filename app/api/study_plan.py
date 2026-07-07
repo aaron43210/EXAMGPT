@@ -43,6 +43,7 @@ Total study hours: {total_hours}
 4. For longer plans (>7 days), group into phases but still show daily breakdown.
 5. Include revision days and PYQ practice days near the end.
 6. Prioritize topics that appear in PYQs.
+7. Provide 3 to 5 highly actionable, specific study tips on how to best tackle and complete this exact course material.
 
 Generate a JSON object with this EXACT structure:
 {{
@@ -71,7 +72,7 @@ Generate a JSON object with this EXACT structure:
     }}
   ],
   "priority_topics": ["Most important topic 1", "Topic 2"],
-  "tips": ["Tip 1", "Tip 2"]
+  "tips": ["Actionable study tip 1 on how to master this subject", "Actionable study tip 2...", "Actionable study tip 3..."]
 }}
 
 RESPOND ONLY WITH THE JSON. No markdown, no code fences, just raw JSON."""
