@@ -7,43 +7,39 @@ from app.agents.llm_setup import get_llm
 
 logger = logging.getLogger(__name__)
 
-ANSWER_PROMPT = """You are ExamGPT, a friendly and knowledgeable AI study assistant. Your personality is warm, encouraging, and conversational — like a brilliant senior student helping a friend.
+ANSWER_PROMPT = """You are ExamGPT, a helpful AI study assistant. You must behave like a real conversational assistant.
 
-## Behavior Rules
-- If the user is greeting you (e.g., "hi", "hello", "hey") or asking something casual, respond warmly and naturally in 1-2 sentences. Do NOT use headings or bullet points for these.
-- If the user asks a genuine study or exam question, answer thoroughly using the provided context, with clear structure and citations.
-- If context is not available but the question is simple, answer from your general knowledge concisely.
-- Always match the tone and complexity of the question. Short question = short answer. Complex question = detailed answer.
+## Critical Rules
+1. NEVER introduce yourself again if there is already a conversation history — you are already mid-conversation.
+2. NEVER start your reply with "Hi!", "Hello!", or any greeting if the user is continuing a conversation.
+3. If the user's message is a casual greeting (first message only), respond warmly in 1-2 sentences max.
+4. If the user says "what is the relevance of this?", "explain more", "what about that?" — they are referring to the PREVIOUS TOPIC in the chat history. Use the history to understand what "this" or "that" refers to.
+5. Match your response length to the question. Short casual question = short answer. Complex study question = detailed answer.
+6. Only use headings/bullet points for complex study topics. NOT for casual chat.
 
-## Recent Conversation
+## Conversation History (use this to understand follow-up questions)
 {chat_history}
 
-## Student Question
+## Current Question
 {query}
 
-## Knowledge Graph Context
+## Retrieved Context from Course Documents
+### Knowledge Graph
 {kg_context}
 
-## Syllabus Scope
+### Syllabus Scope
 {syllabus_scope}
 
-## Relevant Notes
+### Relevant Notes
 {notes_context}
 
-## Related Previous Year Questions
+### Related PYQs
 {pyq_context}
 
-## Evaluation Feedback (if retrying)
+### Evaluation Feedback (if retrying)
 {feedback}
 
-## Instructions
-1. Read the Behavior Rules above first.
-2. If this is a casual message, respond naturally without structure.
-3. If it's a study question, answer using only the provided context.
-4. Cite specific sources using [Source: filename] format.
-5. If related PYQs exist, mention the exam relevance.
-
-## Answer:"""
+## Your Response:"""
 
 
 def answer_node(state: PipelineState) -> dict:
@@ -58,33 +54,34 @@ def answer_node(state: PipelineState) -> dict:
     evaluation = state.get("evaluation", {})
     history = state.get("chat_history", [])
 
-    # Format chat history as a readable thread
+    # Format chat history as a numbered conversation thread
     if history:
-        history_str = "\n".join(
-            f"{m['role'].capitalize()}: {m['content']}" for m in history
-        )
+        lines = []
+        for i, m in enumerate(history, 1):
+            role = "Student" if m["role"] == "user" else "ExamGPT"
+            lines.append(f"[{i}] {role}: {m['content']}")
+        history_str = "\n".join(lines)
     else:
-        history_str = "This is the start of the conversation."
+        history_str = "[No previous messages — this is the start of the conversation]"
 
-    # Format contexts for the prompt
     kg_str = "\n".join([
         f"- {r.get('topic', '?')} --[{r.get('relationship', '?')}]--> {r.get('related_name', '?')}"
         for r in kg_context
-    ]) if kg_context else "No knowledge graph data available."
+    ]) if kg_context else "None"
 
-    syllabus_str = f"In scope: {syllabus_scope.get('in_scope', [])}" if syllabus_scope else "No syllabus data."
+    syllabus_str = f"In scope: {syllabus_scope.get('in_scope', [])}" if syllabus_scope else "None"
 
     notes_str = "\n\n".join([
         f"[Source: {n.get('source', 'unknown')}]\n{n.get('content', '')}"
         for n in retrieved_notes
-    ]) if retrieved_notes else "No notes available."
+    ]) if retrieved_notes else "None"
 
     pyq_str = "\n\n".join([
         f"[Year: {p.get('year', '?')}, Source: {p.get('source', 'unknown')}]\n{p.get('content', '')}"
         for p in related_pyqs
-    ]) if related_pyqs else "No PYQ data available."
+    ]) if related_pyqs else "None"
 
-    feedback = evaluation.get("feedback", "None — first attempt.") if evaluation else "None — first attempt."
+    feedback = evaluation.get("feedback", "None") if evaluation else "None"
 
     prompt = ANSWER_PROMPT.format(
         query=query,
@@ -99,7 +96,6 @@ def answer_node(state: PipelineState) -> dict:
     response = llm.invoke(prompt)
     draft_answer = response.content if hasattr(response, "content") else str(response)
 
-    # Build citations list
     citations = []
     for n in retrieved_notes:
         citations.append({"source": n.get("source"), "type": "notes"})
