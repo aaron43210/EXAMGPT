@@ -58,6 +58,7 @@ def run_examgpt_query(
     query: str,
     user_id: int = 0,
     course_id: int = 0,
+    chat_history: list = None,
 ) -> dict:
     """
     Main entry point: runs the full 7-node pipeline.
@@ -70,6 +71,7 @@ def run_examgpt_query(
         "user_id": user_id,
         "course_id": course_id,
         "user_query": query,
+        "chat_history": chat_history or [],
         "plan": [],
         "kg_context": [],
         "syllabus_scope": {},

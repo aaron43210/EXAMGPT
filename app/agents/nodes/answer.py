@@ -7,7 +7,16 @@ from app.agents.llm_setup import get_llm
 
 logger = logging.getLogger(__name__)
 
-ANSWER_PROMPT = """You are ExamGPT, an expert AI study assistant. Answer the student's question using ONLY the provided context. Be thorough, accurate, and cite your sources.
+ANSWER_PROMPT = """You are ExamGPT, a friendly and knowledgeable AI study assistant. Your personality is warm, encouraging, and conversational — like a brilliant senior student helping a friend.
+
+## Behavior Rules
+- If the user is greeting you (e.g., "hi", "hello", "hey") or asking something casual, respond warmly and naturally in 1-2 sentences. Do NOT use headings or bullet points for these.
+- If the user asks a genuine study or exam question, answer thoroughly using the provided context, with clear structure and citations.
+- If context is not available but the question is simple, answer from your general knowledge concisely.
+- Always match the tone and complexity of the question. Short question = short answer. Complex question = detailed answer.
+
+## Recent Conversation
+{chat_history}
 
 ## Student Question
 {query}
@@ -28,11 +37,11 @@ ANSWER_PROMPT = """You are ExamGPT, an expert AI study assistant. Answer the stu
 {feedback}
 
 ## Instructions
-1. Answer the question thoroughly based on the provided context
-2. Cite specific sources using [Source: filename] format
-3. If the question appears out of syllabus scope, mention this
-4. If related PYQs exist, mention the exam relevance
-5. Structure your answer with clear headings and bullet points
+1. Read the Behavior Rules above first.
+2. If this is a casual message, respond naturally without structure.
+3. If it's a study question, answer using only the provided context.
+4. Cite specific sources using [Source: filename] format.
+5. If related PYQs exist, mention the exam relevance.
 
 ## Answer:"""
 
@@ -47,6 +56,15 @@ def answer_node(state: PipelineState) -> dict:
     retrieved_notes = state.get("retrieved_notes", [])
     related_pyqs = state.get("related_pyqs", [])
     evaluation = state.get("evaluation", {})
+    history = state.get("chat_history", [])
+
+    # Format chat history as a readable thread
+    if history:
+        history_str = "\n".join(
+            f"{m['role'].capitalize()}: {m['content']}" for m in history
+        )
+    else:
+        history_str = "This is the start of the conversation."
 
     # Format contexts for the prompt
     kg_str = "\n".join([
@@ -70,6 +88,7 @@ def answer_node(state: PipelineState) -> dict:
 
     prompt = ANSWER_PROMPT.format(
         query=query,
+        chat_history=history_str,
         kg_context=kg_str,
         syllabus_scope=syllabus_str,
         notes_context=notes_str,
@@ -78,7 +97,6 @@ def answer_node(state: PipelineState) -> dict:
     )
 
     response = llm.invoke(prompt)
-    # ChatHuggingFace returns an AIMessage object; extract string content
     draft_answer = response.content if hasattr(response, "content") else str(response)
 
     # Build citations list
