@@ -1,19 +1,16 @@
-FROM python:3.11-slim
+FROM node:20-alpine
 
 WORKDIR /app
 
-# Install system dependencies needed for psycopg2, sentence-transformers, etc.
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
+COPY package.json ./
 
-COPY requirements.txt .
-
-RUN pip install --no-cache-dir -r requirements.txt
+# We only copy package.json for now since there's no package-lock.json yet
+# In a real scenario, you'd run npm install first to generate the lock file.
+RUN npm install
 
 COPY . .
 
-ENV PYTHONPATH=/app
+# Expose port for Vite development server
+EXPOSE 3000
 
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 7860"]
+CMD ["npm", "run", "dev", "--", "--host"]
