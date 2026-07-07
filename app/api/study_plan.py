@@ -193,11 +193,11 @@ def generate_study_plan(
                     "day": d + 1,
                     "date_label": f"Day {d + 1}",
                     "theme": "Study Session",
-                    "topics": [{"name": "Review uploaded materials", "duration_hours": request.hours_per_day, "activity": "Read and summarize", "priority": "medium"}],
+                    "topics": [{"name": f"Error: No docs found or LLM parse failed (sys={len(syllabus_text)}, notes={len(notes_text)})", "duration_hours": request.hours_per_day, "activity": "Read and summarize", "priority": "medium"}],
                 }
                 for d in range(min(request.days, 7))
             ],
-            "tips": ["Upload your syllabus for a more detailed plan", "Practice PYQs regularly"],
+            "tips": [f"Debug: syllabus len: {len(syllabus_text)}, notes len: {len(notes_text)}", f"Error: {str(e)}", f"Raw: {response_text[:100]}", "Practice PYQs regularly"],
             "priority_topics": [],
         }
 
