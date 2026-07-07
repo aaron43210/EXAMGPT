@@ -34,5 +34,8 @@ class PipelineState(TypedDict, total=False):
     evaluation: dict          # {"passed": bool, "feedback": str}
     retry_count: int
 
+    # ── Chat History (in-memory context) ────────────────────────
+    chat_history: list[dict]  # [{"role": "user"/"assistant", "content": "..."}]
+
     # ── Error tracking ──────────────────────────────────────────
     error: str
