@@ -63,18 +63,60 @@ Generate a JSON object with this EXACT structure:
           "duration_hours": 1.5,
           "activity": "Read notes + make summary",
           "priority": "high"
-        }},
-        {{
-          "name": "Another specific topic",
-          "duration_hours": 2.0,
-          "activity": "Study concepts + solve examples",
-          "priority": "medium"
         }}
       ]
     }}
   ],
   "priority_topics": ["Most important topic 1", "Topic 2"],
-  "tips": ["Actionable study tip 1 on how to master this subject", "Actionable study tip 2...", "Actionable study tip 3..."]
+  "tips": ["Actionable study tip 1 on how to master this subject", "Actionable study tip 2..."]
+}}
+
+RESPOND ONLY WITH THE JSON. No markdown, no code fences, just raw JSON."""
+
+PHASE_PLAN_PROMPT = """You are an expert academic study planner. Analyze the course content below and create a PHASE-BASED study schedule.
+
+Course: {course_name}
+Days until exam: {days}
+Hours per day: {hours_per_day}
+Total study hours: {total_hours}
+
+## Actual Course Content (from student's uploaded documents)
+
+### Syllabus / Course Outline
+{syllabus_text}
+
+### Notes & Study Material
+{notes_text}
+
+### Previous Year Questions
+{pyq_text}
+
+## IMPORTANT RULES
+1. Because the timeframe is long ({days} days), you MUST group the schedule into 3-6 logical phases to ensure it is concise.
+2. The exact topics you schedule MUST be extracted from the uploaded documents above.
+3. Each phase MUST list the number of days, total hours, focus, topics, and activities.
+4. ALWAYS use the Syllabus and Previous Year Questions (PYQs) as the source of truth for prioritizing topics.
+5. Include a dedicated revision phase and PYQ practice phase near the end.
+6. Provide 3 to 5 highly actionable, specific study tips.
+
+Generate a JSON object with this EXACT structure:
+{{
+  "title": "Study Plan for {course_name}",
+  "total_days": {days},
+  "hours_per_day": {hours_per_day},
+  "phases": [
+    {{
+      "phase": 1,
+      "name": "Introduction and Fundamentals",
+      "days": 5,
+      "hours": 20,
+      "focus": "Understanding basic concepts",
+      "topics": ["Topic 1 from doc", "Topic 2 from doc"],
+      "activities": ["Read chapter 1", "Summarize notes"]
+    }}
+  ],
+  "priority_topics": ["Most important topic 1", "Topic 2"],
+  "tips": ["Actionable study tip 1 on how to master this subject", "Actionable study tip 2..."]
 }}
 
 RESPOND ONLY WITH THE JSON. No markdown, no code fences, just raw JSON."""
@@ -157,7 +199,8 @@ def generate_study_plan(
     llm = get_llm()
     total_hours = request.days * request.hours_per_day
 
-    prompt = STUDY_PLAN_PROMPT.format(
+    prompt_template = STUDY_PLAN_PROMPT if request.days <= 14 else PHASE_PLAN_PROMPT
+    prompt = prompt_template.format(
         course_name=course.name,
         days=request.days,
         hours_per_day=request.hours_per_day,
