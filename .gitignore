@@ -1,12 +1,15 @@
-# Binary/Data files - not for git
-uploads/
-vector_store/
-__pycache__/
-**/__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.index
-.env
-*.pdf
-*.docx
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
