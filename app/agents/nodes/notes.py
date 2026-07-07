@@ -20,7 +20,8 @@ def notes_node(state: PipelineState) -> dict:
     docs = hybrid_retriever.retrieve(
         enriched_query,
         top_k=5,
-        doc_type_filter="notes"
+        doc_type_filter="notes",
+        course_id_filter=state.get("course_id")
     )
 
     retrieved_notes = []

@@ -19,7 +19,8 @@ def pyq_node(state: PipelineState) -> dict:
     docs = hybrid_retriever.retrieve(
         enriched_query,
         top_k=5,
-        doc_type_filter="pyq"
+        doc_type_filter="pyq",
+        course_id_filter=state.get("course_id")
     )
 
     related_pyqs = []

@@ -24,31 +24,15 @@ class HybridRetriever:
         embeddings = self.faiss_retriever.embedder.embed_documents(texts)
         self.faiss_retriever.vector_store.add_embeddings(embeddings)
 
-    def retrieve(self, query: str, top_k: int = 4, doc_type_filter: str = None) -> list[Document]:
-        """Retrieve documents with optional doc_type filtering."""
+    def retrieve(self, query: str, top_k: int = 4, doc_type_filter: str = None, course_id_filter: int = None) -> list[Document]:
+        """Retrieve documents with optional doc_type and course_id filtering."""
         if not self.documents:
             return []
 
-        # Filter documents by type if specified
-        if doc_type_filter:
-            filtered_docs = [
-                d for d in self.documents
-                if d.metadata.get("doc_type", "notes") == doc_type_filter
-            ]
-            if not filtered_docs:
-                return []
-            # Search within filtered docs using BM25
-            bm25_ret = BM25Retriever()
-            bm25_ret.build_index(
-                [d.page_content for d in filtered_docs], filtered_docs
-            )
-            bm25_indices, _ = bm25_ret.search(query, min(top_k, len(filtered_docs)))
-            results = [filtered_docs[i] for i in bm25_indices if i < len(filtered_docs)]
-            return results[:top_k]
-
-        # Default: full hybrid retrieval (BM25 + FAISS with RRF)
-        bm25_indices, _ = self.bm25_retriever.search(query, top_k)
-        faiss_indices, _ = self.faiss_retriever.search(query, top_k)
+        # Get enough candidates to survive filtering
+        search_k = top_k * 10
+        bm25_indices, _ = self.bm25_retriever.search(query, search_k)
+        faiss_indices, _ = self.faiss_retriever.search(query, search_k)
 
         fused_scores = {}
         for rank, doc_idx in enumerate(bm25_indices):
@@ -59,9 +43,23 @@ class HybridRetriever:
                 fused_scores[doc_idx] = fused_scores.get(doc_idx, 0) + 1 / (rank + 60)
 
         sorted_indices = sorted(fused_scores.keys(), key=lambda x: fused_scores[x], reverse=True)
-        top_indices = sorted_indices[:top_k]
-
-        return [self.documents[idx] for idx in top_indices if idx < len(self.documents)]
+        
+        results = []
+        for idx in sorted_indices:
+            if idx < len(self.documents):
+                doc = self.documents[idx]
+                
+                # Apply filters
+                if doc_type_filter and doc.metadata.get("doc_type", "notes") != doc_type_filter:
+                    continue
+                if course_id_filter is not None and doc.metadata.get("course_id") != course_id_filter:
+                    continue
+                    
+                results.append(doc)
+                if len(results) >= top_k:
+                    break
+                    
+        return results
 
 
 # Global instance
