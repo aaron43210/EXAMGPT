@@ -27,11 +27,23 @@ def submit_query(
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
 
+    # Fetch last 5 messages as in-context chat history
+    recent_chats = db.query(ChatHistory).filter(
+        ChatHistory.course_id == course_id,
+        ChatHistory.user_id == current_user.id,
+    ).order_by(ChatHistory.created_at.desc()).limit(5).all()
+
+    chat_history = []
+    for c in reversed(recent_chats):  # oldest first
+        chat_history.append({"role": "user", "content": c.query})
+        chat_history.append({"role": "assistant", "content": c.response})
+
     # Run the full pipeline
     result = run_examgpt_query(
         query=request.query,
         user_id=current_user.id,
         course_id=course_id,
+        chat_history=chat_history,
     )
 
     # Save chat history

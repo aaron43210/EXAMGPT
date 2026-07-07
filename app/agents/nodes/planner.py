@@ -16,7 +16,11 @@ The plan should identify:
 3. Whether to search notes for relevant content
 4. Whether to check previous year questions for patterns
 
-Student Query: {query}
+## Recent Chat History
+{chat_history}
+
+## Student Query
+{query}
 
 Respond with a JSON object:
 {{
@@ -35,11 +39,18 @@ def planner_node(state: PipelineState) -> dict:
     llm = get_llm()
     query = state["user_query"]
 
-    response = llm.invoke(PLANNER_PROMPT.format(query=query))
-    # ChatHuggingFace returns an AIMessage object; extract string content
+    # Format chat history
+    history = state.get("chat_history", [])
+    if history:
+        history_str = "\n".join(
+            f"{m['role'].capitalize()}: {m['content']}" for m in history
+        )
+    else:
+        history_str = "No previous messages."
+
+    response = llm.invoke(PLANNER_PROMPT.format(query=query, chat_history=history_str))
     response_text = response.content if hasattr(response, "content") else str(response)
 
-    # Parse LLM response
     try:
         plan_data = json.loads(response_text.strip())
         subtasks = plan_data.get("subtasks", [query])
