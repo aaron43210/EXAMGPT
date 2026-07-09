@@ -55,7 +55,7 @@ app.include_router(study_plan_router, prefix="/api/v1/courses", tags=["Study Pla
 # ── Health / Readiness ──────────────────────────────────────────────────
 @app.get("/")
 def root():
-    return {"message": "Welcome to ExamGPT API", "version": "3.0.0"}
+    return {"message": "Welcome to ExamGPT API", "version": "1.0.0"}
 
 
 @app.get("/health")
