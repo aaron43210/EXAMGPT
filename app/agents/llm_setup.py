@@ -8,9 +8,8 @@ from app.core.config import get_settings
 
 def get_llm():
     settings = get_settings()
-
-    # Use Mistral-7B — fast, reliable, and rarely rate-limited on the free HuggingFace router
-    # Qwen2.5-72B hits 429 Too Many Requests frequently due to high demand
+    
+    # Mistral-7B — reliable, fast, and rarely rate-limited on HuggingFace free tier
     model_id = "mistralai/Mistral-7B-Instruct-v0.3"
 
     endpoint = HuggingFaceEndpoint(
