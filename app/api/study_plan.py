@@ -214,7 +214,7 @@ def generate_study_plan(
         response = llm.invoke(prompt)
     except Exception as e:
         error_str = str(e).lower()
-        if "402" in error_str or "payment" in error_str or "credits" in error_str or "depleted" in error_str:
+        if "402" in error_str or "payment" in error_str or "credits" in error_str or "depleted" in error_str or "400" in error_str or "not supported" in error_str or "invalid_request_error" in error_str:
             raise HTTPException(
                 status_code=402,
                 detail="🚦 API Limit Exceeded. This application is for educational and demo purposes only. The monthly free credits on the AI model API key have been depleted."
