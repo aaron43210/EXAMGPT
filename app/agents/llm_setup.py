@@ -10,9 +10,7 @@ def get_llm():
     settings = get_settings()
     
     # Force Llama 3 to override any stale Hugging Face Secrets
-    model_id = settings.LLM_MODEL
-    if "zephyr" in model_id.lower() or "mistral" in model_id.lower():
-        model_id = "meta-llama/Meta-Llama-3-8B-Instruct"
+    model_id = "Qwen/Qwen2.5-72B-Instruct"
 
     endpoint = HuggingFaceEndpoint(
         repo_id=model_id,
