@@ -9,7 +9,16 @@ from app.core.config import get_settings
 def get_llm():
     settings = get_settings()
     
-    # Force Llama 3 to override any stale Hugging Face Secrets
+    # Use Groq if API key is provided (incredibly fast, free, high rate limits)
+    if settings.GROQ_API_KEY:
+        from langchain_groq import ChatGroq
+        return ChatGroq(
+            groq_api_key=settings.GROQ_API_KEY,
+            model_name="llama-3.1-8b-instant",
+            temperature=0.2,
+        )
+
+    # Fallback to Hugging Face
     model_id = settings.LLM_MODEL
     if "zephyr" in model_id.lower() or "mistral" in model_id.lower():
         model_id = "meta-llama/Meta-Llama-3-8B-Instruct"

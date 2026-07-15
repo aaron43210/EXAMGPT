@@ -32,8 +32,9 @@ class Settings(BaseSettings):
     SUPABASE_KEY: str = ""
     SUPABASE_BUCKET: str = "examgpt-docs"
 
-    # ── Hugging Face Inference ──────────────────────────────────
+    # ── Hugging Face Inference & Groq ───────────────────────────
     HUGGINGFACE_API_KEY: str = ""
+    GROQ_API_KEY: str = ""
     LLM_MODEL: str = "HuggingFaceH4/zephyr-7b-beta"
     EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
 
