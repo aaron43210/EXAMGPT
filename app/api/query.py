@@ -48,7 +48,12 @@ def submit_query(
         )
     except Exception as e:
         error_str = str(e).lower()
-        if "429" in error_str or "rate limit" in error_str or "model busy" in error_str or "too many requests" in error_str or "engine_overloaded" in error_str:
+        if "402" in error_str or "payment" in error_str or "credits" in error_str or "depleted" in error_str:
+            raise HTTPException(
+                status_code=402,
+                detail="🚦 API Limit Exceeded. This application is for educational and demo purposes only. The monthly free credits on the AI model API key have been depleted."
+            )
+        elif "429" in error_str or "rate limit" in error_str or "model busy" in error_str or "too many requests" in error_str or "engine_overloaded" in error_str:
             raise HTTPException(
                 status_code=503,
                 detail="🚦 The AI model has reached its rate limit. Please try again in a few minutes. ⚠️ Note: This model is provided for demo purposes only and runs on a free-tier API with limited capacity."
