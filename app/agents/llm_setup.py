@@ -9,8 +9,9 @@ from app.core.config import get_settings
 def get_llm():
     settings = get_settings()
     
-    # Mistral-7B — reliable, fast, and rarely rate-limited on HuggingFace free tier
-    model_id = "mistralai/Mistral-7B-Instruct-v0.3"
+    # Llama-3.1-8B-Instruct — verified chat model on HuggingFace free-tier router
+    # Mistral-7B-v0.3 is not registered as a chat model on the HF router
+    model_id = "meta-llama/Llama-3.1-8B-Instruct"
 
     endpoint = HuggingFaceEndpoint(
         repo_id=model_id,
