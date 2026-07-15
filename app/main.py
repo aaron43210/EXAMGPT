@@ -48,9 +48,10 @@ app.add_middleware(
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
-    # Add recommended security headers
-    response.headers["Content-Security-Policy"] = "default-src 'self'"
-    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    # Add recommended security headers (relaxed for Hugging Face Spaces & Swagger UI)
+    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: fastapi.tiangolo.com; frame-ancestors 'self' https://huggingface.co"
+    # We omit X-Frame-Options here because it actively breaks Hugging Face Spaces embedding. 
+    # The 'frame-ancestors' directive in CSP serves the same modern security purpose without breaking the UI.
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
