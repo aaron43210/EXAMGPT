@@ -9,9 +9,10 @@ from app.core.config import get_settings
 def get_llm():
     settings = get_settings()
     
-    # Llama-3.1-8B-Instruct — verified chat model on HuggingFace free-tier router
-    # Mistral-7B-v0.3 is not registered as a chat model on the HF router
-    model_id = "meta-llama/Llama-3.1-8B-Instruct"
+    # Force Llama 3 to override any stale Hugging Face Secrets
+    model_id = settings.LLM_MODEL
+    if "zephyr" in model_id.lower() or "mistral" in model_id.lower():
+        model_id = "meta-llama/Meta-Llama-3-8B-Instruct"
 
     endpoint = HuggingFaceEndpoint(
         repo_id=model_id,
