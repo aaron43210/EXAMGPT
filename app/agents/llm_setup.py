@@ -9,8 +9,8 @@ from app.core.config import get_settings
 def get_llm():
     settings = get_settings()
     
-    # Force Llama 3 to override any stale Hugging Face Secrets
-    model_id = "Qwen/Qwen2.5-72B-Instruct"
+    # Mistral-7B — reliable, fast, and rarely rate-limited on HuggingFace free tier
+    model_id = "mistralai/Mistral-7B-Instruct-v0.3"
 
     endpoint = HuggingFaceEndpoint(
         repo_id=model_id,
