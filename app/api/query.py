@@ -39,12 +39,21 @@ def submit_query(
         chat_history.append({"role": "assistant", "content": c.response})
 
     # Run the full pipeline
-    result = run_examgpt_query(
-        query=request.query,
-        user_id=current_user.id,
-        course_id=course_id,
-        chat_history=chat_history,
-    )
+    try:
+        result = run_examgpt_query(
+            query=request.query,
+            user_id=current_user.id,
+            course_id=course_id,
+            chat_history=chat_history,
+        )
+    except Exception as e:
+        error_str = str(e).lower()
+        if "429" in error_str or "rate limit" in error_str or "model busy" in error_str or "too many requests" in error_str or "engine_overloaded" in error_str:
+            raise HTTPException(
+                status_code=503,
+                detail="🚦 The AI model has reached its rate limit. Please try again in a few minutes. ⚠️ Note: This model is provided for demo purposes only and runs on a free-tier API with limited capacity."
+            )
+        raise HTTPException(status_code=500, detail=f"Pipeline error: {str(e)}")
 
     # Save chat history
     chat = ChatHistory(

@@ -210,7 +210,16 @@ def generate_study_plan(
         pyq_text=pyq_text[:1500],
     )
 
-    response = llm.invoke(prompt)
+    try:
+        response = llm.invoke(prompt)
+    except Exception as e:
+        error_str = str(e).lower()
+        if "429" in error_str or "rate limit" in error_str or "model busy" in error_str or "too many requests" in error_str or "engine_overloaded" in error_str:
+            raise HTTPException(
+                status_code=503,
+                detail="🚦 The AI model has reached its rate limit. Please try again in a few minutes. ⚠️ Note: This model is provided for demo purposes only and runs on a free-tier API with limited capacity."
+            )
+        raise HTTPException(status_code=500, detail=f"LLM error: {str(e)}")
     response_text = response.content if hasattr(response, "content") else str(response)
 
     # Extract JSON block even if wrapped in text
