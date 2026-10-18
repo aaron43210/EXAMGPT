@@ -28,3 +28,7 @@ class Chunker:
                 break
             start = max(end - self.chunk_overlap, start + 1)
         return chunks
+
+    def chunk_pages(self, pages: list[tuple[int, str]]) -> list[tuple[int, str]]:
+        """Chunk page by page so every chunk keeps its page number for citations."""
+        return [(page, chunk) for page, text in pages for chunk in self.chunk_text(text)]

@@ -1,0 +1,15 @@
+{"query": "hi", "intent": "chitchat"}
+{"query": "thank you", "intent": "chitchat"}
+{"query": "make a quiz on paging", "intent": "quiz"}
+{"query": "test me on deadlocks", "intent": "quiz"}
+{"query": "10 mcqs on scheduling", "intent": "quiz"}
+{"query": "what are the expected questions for unit 4", "intent": "important_questions"}
+{"query": "pyqs on semaphores", "intent": "important_questions"}
+{"query": "summarize unit 2", "intent": "summary"}
+{"query": "cheat sheet for disk scheduling", "intent": "summary"}
+{"query": "what is a semaphore", "intent": "question"}
+{"query": "explain paging with an example", "intent": "question"}
+{"query": "difference between process and thread", "intent": "question"}
+{"query": "hello there, what is thrashing?", "intent": "question"}
+{"query": "key points of file allocation", "intent": "summary"}
+{"query": "most asked topics in OS", "intent": "important_questions"}

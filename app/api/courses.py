@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.db.models import (
     Course, User, Document, Chunk, ChatHistory, PipelineRun, StudyPlan, PYQQuestion, EvaluationResult,
+    AnswerCache, Feedback, KGEdge, KGNode,
 )
 from app.schemas.course import CourseCreate, CourseResponse, CourseListResponse
 from app.core.security import get_current_user
@@ -74,12 +75,17 @@ def delete_course(course: Course = Depends(get_owned_course), db: Session = Depe
     pyq_ids = [p for (p,) in db.query(PYQQuestion.id).filter(PYQQuestion.course_id == course.id)]
     if pyq_ids:
         db.query(EvaluationResult).filter(EvaluationResult.question_id.in_(pyq_ids)).delete(synchronize_session=False)
+    db.query(EvaluationResult).filter(EvaluationResult.course_id == course.id).delete(synchronize_session=False)
+    db.query(Feedback).filter(Feedback.course_id == course.id).delete(synchronize_session=False)
+    db.query(AnswerCache).filter(AnswerCache.course_id == course.id).delete(synchronize_session=False)
     db.query(PipelineRun).filter(PipelineRun.course_id == course.id).delete(synchronize_session=False)
     db.query(ChatHistory).filter(ChatHistory.course_id == course.id).delete(synchronize_session=False)
     db.query(StudyPlan).filter(StudyPlan.course_id == course.id).delete(synchronize_session=False)
     db.query(PYQQuestion).filter(PYQQuestion.course_id == course.id).delete(synchronize_session=False)
     if doc_ids:
         db.query(PYQQuestion).filter(PYQQuestion.document_id.in_(doc_ids)).delete(synchronize_session=False)
+    db.query(KGEdge).filter(KGEdge.course_id == course.id).delete(synchronize_session=False)
+    db.query(KGNode).filter(KGNode.course_id == course.id).delete(synchronize_session=False)
     db.query(Chunk).filter(Chunk.course_id == course.id).delete(synchronize_session=False)
     db.query(Document).filter(Document.course_id == course.id).delete(synchronize_session=False)
     db.delete(course)

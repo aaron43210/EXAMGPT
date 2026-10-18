@@ -4,7 +4,7 @@ from tests.conftest import register_and_login, upload
 
 
 def _context_sent(fake_llm) -> str:
-    return fake_llm.calls[-1]["messages"][-1]["content"]
+    return fake_llm.by_purpose("tutor")[-1]["messages"][-1]["content"]
 
 
 def test_query_uses_only_own_course_documents(client, auth, course, fake_llm):
@@ -21,7 +21,7 @@ def test_query_uses_only_own_course_documents(client, auth, course, fake_llm):
     sent = _context_sent(fake_llm)
     assert "circular wait" in sent
     assert "SECRET-EVE-DATA" not in sent
-    assert r.json()["citations"] == [{"source": "notes.pdf", "type": "notes"}]
+    assert r.json()["citations"] == [{"source": "notes.pdf", "page": 1, "type": "notes"}]
 
 
 def test_retrieval_survives_restart(client, auth, course, fake_llm):
@@ -69,6 +69,10 @@ def test_llm_rate_limit_returns_friendly_429(client, auth, course, fake_llm):
     assert r.status_code == 429
     assert "org_abc123" not in r.text
     assert "try again" in r.json()["detail"]
+    m = client.get(f"/api/v1/courses/{course['id']}/metrics", headers=auth).json()
+    assert m["requests"]["failed"] == 1
+    assert m["requests"]["failures_by_type"] == {"rate_limited": 1}
+    assert m["requests"]["by_intent"] == {"question": 1}  # intent known from the router before the LLM failed
 
 
 def test_llm_outage_returns_503_without_leaking(client, auth, course, fake_llm):
@@ -76,6 +80,11 @@ def test_llm_outage_returns_503_without_leaking(client, auth, course, fake_llm):
     r = client.post(f"/api/v1/courses/{course['id']}/query", json={"query": "anything"}, headers=auth)
     assert r.status_code == 503
     assert "10.0.0.5" not in r.text
+    fake_llm.error = None
+    fake_llm.replies["quiz_master"] = "not json"
+    assert client.post(f"/api/v1/courses/{course['id']}/quiz", json={}, headers=auth).status_code == 502
+    m = client.get(f"/api/v1/courses/{course['id']}/metrics", headers=auth).json()
+    assert m["requests"]["failures_by_type"] == {"llm_unavailable": 1, "invalid_output": 1}
 
 
 def test_unexpected_error_is_generic_500(client, auth, course, monkeypatch):
@@ -105,7 +114,7 @@ def test_evaluation_retry_loop(client, auth, course, fake_llm, monkeypatch):
         "draft two",
         '{"passed": true, "score": 8, "feedback": "ok"}',
     ])
-    fake_llm.reply = lambda messages: next(replies)
+    fake_llm.reply = lambda messages, purpose: next(replies)
     r = client.post(f"/api/v1/courses/{course['id']}/query", json={"query": "Explain paging"}, headers=auth)
     body = r.json()
     assert body["response"] == "draft two"
@@ -137,7 +146,7 @@ def test_study_plan_long_uses_phases_and_rejects_bad_json(client, auth, course, 
     fake_llm.reply = "not json at all"
     r = client.post(f"/api/v1/courses/{cid}/study-plan", json={"days": 60}, headers=auth)
     assert r.status_code == 502
-    assert len(fake_llm.calls) == 2  # retried once
+    assert len(fake_llm.by_purpose("planner")) == 2  # retried once
 
     fake_llm.reply = json.dumps({"phases": [{"phase": 1, "name": "Basics", "days": 60}]})
     r = client.post(f"/api/v1/courses/{cid}/study-plan", json={"days": 60}, headers=auth)

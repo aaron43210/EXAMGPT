@@ -1,0 +1,14 @@
+=== page 1 ===
+CS301 Operating Systems — Previous Year Question Papers
+December 2023
+Q1. Explain the Banker's algorithm for deadlock avoidance with an example. (10 marks)
+Q2. Compare FCFS, SJF and Round Robin scheduling. (10 marks)
+Q3. What is thrashing? How can it be prevented? (5 marks)
+May 2023
+Q1. State and explain the four necessary conditions for deadlock. (5 marks)
+Q2. Explain demand paging and page faults. (10 marks)
+Q3. What is a semaphore? Solve the producer-consumer problem using semaphores. (10 marks)
+December 2022
+Q1. Explain the Banker's algorithm and the safety algorithm. (10 marks)
+Q2. Describe the page replacement algorithms FIFO, Optimal and LRU. (10 marks)
+Q3. Explain SCAN and C-SCAN disk scheduling. (5 marks)

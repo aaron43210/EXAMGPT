@@ -8,6 +8,8 @@ os.environ.update({
     "GROQ_API_KEY": "test-key",
     "EMBEDDINGS_ENABLED": os.getenv("TEST_EMBEDDINGS", "false"),
     "EVAL_ENABLED": "false",
+    "RERANKER_ENABLED": os.getenv("TEST_EMBEDDINGS", "false"),
+    "ONLINE_EVAL_SAMPLE_RATE": "0",
     "FRONTEND_URL": "https://examgpt.netlify.app",
 })
 
@@ -15,6 +17,8 @@ import pytest
 from fastapi.testclient import TestClient
 from app.db.database import Base, engine
 from app.core.rate_limit import limiter
+from app.agents.llm_setup import budget
+from app.retrieval.hybrid_retriever import reset_index_cache
 from app.main import app
 
 
@@ -51,6 +55,8 @@ def make_pdf(text: str) -> bytes:
 def fresh_db():
     Base.metadata.create_all(bind=engine)
     limiter.reset()
+    budget.reset()
+    reset_index_cache()
     yield
     Base.metadata.drop_all(bind=engine)
 
@@ -61,27 +67,38 @@ def client():
         yield c
 
 
+class FakeLLM:
+    """Stands in for Groq at the gateway's lowest level (llm_setup._complete).
+
+    reply   — default response: a string, or callable(messages, purpose) -> str
+    replies — per-agent overrides keyed by purpose ("tutor", "kg_syllabus", "judge", ...)
+    error   — exception to raise (or dict purpose -> exception)
+    """
+
+    def __init__(self):
+        self.reply = "Mocked answer"
+        self.replies: dict = {}
+        self.error = None
+        self.calls: list = []
+
+    def __call__(self, messages, model, json_mode, max_tokens, temperature, purpose="general"):
+        self.calls.append({"messages": messages, "model": model, "json_mode": json_mode, "purpose": purpose})
+        error = self.error.get(purpose) if isinstance(self.error, dict) else self.error
+        if error:
+            raise error
+        reply = self.replies.get(purpose, self.reply)
+        text = reply(messages, purpose) if callable(reply) else reply
+        return text, {"prompt_tokens": 100, "completion_tokens": 20}
+
+    def by_purpose(self, purpose):
+        return [c for c in self.calls if c["purpose"] == purpose]
+
+
 @pytest.fixture
 def fake_llm(monkeypatch):
-    """Replace Groq with a recorder. Set `.reply` / `.error` to control behaviour."""
-    class Fake:
-        reply = "Mocked answer"
-        error = None
-        calls: list = []
-
-        def __call__(self, messages, **kwargs):
-            self.calls.append({"messages": messages, **kwargs})
-            if self.error:
-                raise self.error
-            return self.reply(messages) if callable(self.reply) else self.reply
-
-    fake = Fake()
-    fake.calls = []
-    import app.agents.nodes.answer as answer
-    import app.agents.nodes.evaluation as evaluation
-    import app.api.study_plan as study_plan
-    for mod in (answer, evaluation, study_plan):
-        monkeypatch.setattr(mod, "chat", fake)
+    fake = FakeLLM()
+    import app.agents.llm_setup as llm_setup
+    monkeypatch.setattr(llm_setup, "_complete", fake)
     return fake
 
 

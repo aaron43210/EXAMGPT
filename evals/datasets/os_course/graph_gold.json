@@ -1,0 +1,44 @@
+{
+ "topics": [
+  "process concept",
+  "process states",
+  "process control block",
+  "context switch",
+  "threads",
+  "multithreading models",
+  "scheduling criteria",
+  "fcfs",
+  "sjf",
+  "priority scheduling",
+  "round robin",
+  "race conditions",
+  "critical section problem",
+  "semaphores",
+  "classic synchronization problems",
+  "deadlock characterization",
+  "deadlock prevention",
+  "deadlock avoidance",
+  "bankers algorithm",
+  "deadlock detection",
+  "deadlock recovery",
+  "paging",
+  "segmentation",
+  "tlb",
+  "virtual memory",
+  "demand paging",
+  "page replacement",
+  "thrashing",
+  "file system allocation methods",
+  "disk scheduling"
+ ],
+ "prerequisites": [
+  [
+   "process synchronization",
+   "deadlocks"
+  ],
+  [
+   "paging",
+   "virtual memory"
+  ]
+ ]
+}

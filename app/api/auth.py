@@ -18,7 +18,9 @@ router = APIRouter()
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def register(user_in: UserCreate, request: Request, db: Session = Depends(get_db)):
-    limiter.check(f"register:{client_ip(request)}", get_settings().RATE_LIMIT_AUTH_PER_MIN)
+    settings = get_settings()
+    limiter.check(f"register:{client_ip(request)}", settings.RATE_LIMIT_AUTH_PER_MIN)
+    limiter.check("register:global", settings.RATE_LIMIT_REGISTER_GLOBAL_PER_MIN)
 
     taken = db.query(User).filter(
         (func.lower(User.username) == user_in.username) | (func.lower(User.email) == user_in.email)

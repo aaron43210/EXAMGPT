@@ -21,6 +21,9 @@ if config.config_file_name is not None:
 import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+from app.core.config import get_settings
+# Fail fast with a clear message (missing secrets) before trying to reach the database
+get_settings().validate_for_production()
 from app.db.database import Base
 from app.db import models
 
