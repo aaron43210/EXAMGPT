@@ -80,10 +80,22 @@ def estimate_tokens(messages: list[dict], max_tokens: int) -> int:
 def _client():
     from groq import Groq
     settings = get_settings()
-    if not settings.GROQ_API_KEY:
+    key = (settings.GROQ_API_KEY or "").strip().strip("'\"")
+    if not key:
         raise LLMNotConfigured("GROQ_API_KEY is not set")
     # Retries are handled here (fallback model) rather than by sleeping inside the SDK
-    return Groq(api_key=settings.GROQ_API_KEY, timeout=settings.LLM_TIMEOUT_SECONDS, max_retries=1)
+    return Groq(api_key=key, timeout=settings.LLM_TIMEOUT_SECONDS, max_retries=1)
+
+
+@lru_cache()
+def get_available_models() -> list[str]:
+    try:
+        models = [m.id for m in _client().models.list().data]
+        logger.info("Groq available models for this key: %s", models)
+        return models
+    except Exception as e:
+        logger.error("Failed to query Groq available models: %s", e)
+        return []
 
 
 def _complete(messages: list[dict], model: str, json_mode: bool, max_tokens: int,
@@ -118,9 +130,20 @@ def chat(messages: list[dict], *, purpose: str = "general", json_mode: bool = Fa
     if model:
         candidates = [(model, 0)]
     else:
-        candidates = [(settings.GROQ_MODEL, settings.GROQ_TPM_LIMIT)]
-        if settings.GROQ_FALLBACK_MODEL and settings.GROQ_FALLBACK_MODEL != settings.GROQ_MODEL:
-            candidates.append((settings.GROQ_FALLBACK_MODEL, settings.GROQ_FALLBACK_TPM_LIMIT))
+        seen = set()
+        candidates = []
+        for m, limit in [
+            (settings.GROQ_MODEL, settings.GROQ_TPM_LIMIT),
+            (settings.GROQ_FALLBACK_MODEL, settings.GROQ_FALLBACK_TPM_LIMIT),
+        ]:
+            if m and m not in seen:
+                seen.add(m)
+                candidates.append((m, limit))
+        # Also inspect dynamically available models from Groq account
+        for live_model in get_available_models():
+            if live_model not in seen and any(k in live_model.lower() for k in ("llama", "qwen", "mistral")):
+                seen.add(live_model)
+                candidates.append((live_model, 0))
 
     estimate = estimate_tokens(messages, max_tokens)
     last_error: LLMError = LLMRateLimited("token budget exhausted")
