@@ -1,13 +1,3 @@
----
-title: ExamGPT Backend
-emoji: 🎓
-colorFrom: blue
-colorTo: purple
-sdk: docker
-app_port: 7860
-pinned: false
----
-
 <div align="center">
 
 # 🎓 ExamGPT — Autonomous Multi-Agent GraphRAG & Adaptive Learning Platform
