@@ -154,6 +154,7 @@ def readiness():
     """Readiness: the database is reachable. Ping this to keep Space + Supabase awake."""
     from app.db.database import SessionLocal
     from app.retrieval.hybrid_retriever import pgvector_enabled
+    from app.agents.llm_setup import get_available_models
     try:
         with SessionLocal() as db:
             db.execute(text("SELECT 1"))
@@ -161,4 +162,10 @@ def readiness():
     except Exception as e:
         logger.error("Readiness check failed: %s", e)
         return JSONResponse(status_code=503, content={"status": "unavailable"})
-    return {"status": "ready", "llm_configured": bool(settings.GROQ_API_KEY), "vector_index": vector_index}
+    models = get_available_models() if settings.GROQ_API_KEY else []
+    return {
+        "status": "ready",
+        "llm_configured": bool(settings.GROQ_API_KEY),
+        "groq_models": models[:5],
+        "vector_index": vector_index,
+    }
