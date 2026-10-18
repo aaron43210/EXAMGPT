@@ -136,6 +136,10 @@ def chat(messages: list[dict], *, purpose: str = "general", json_mode: bool = Fa
             budget.record(name, max(limit, estimate))  # block this model for the rest of the window
             last_error = e
             continue
+        except LLMError as e:
+            logger.warning("Error on model %s (%s): %s; trying fallback model", name, purpose, e)
+            last_error = e
+            continue
         spent = (usage.get("prompt_tokens", 0) + usage.get("completion_tokens", 0)) or estimate
         budget.record(name, spent)
         tracing.record_llm(purpose, name, usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0),

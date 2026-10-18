@@ -24,7 +24,7 @@ class Settings(BaseSettings):
 
     # ── Groq LLM ────────────────────────────────────────────────
     GROQ_API_KEY: str = ""
-    GROQ_MODEL: str = "llama-3.1-8b-instant"
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
     LLM_TIMEOUT_SECONDS: int = 60
 
     # ── Embeddings (local, optional; BM25 is always available) ──
@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     CORS_EXTRA_ORIGINS: str = ""
 
     # Fallback when the primary model is rate-limited (separate Groq quota). Empty = none.
-    GROQ_FALLBACK_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_FALLBACK_MODEL: str = "llama-3.1-8b-instant"
     # Client-side token budgets (tokens/minute) so we fail fast instead of hammering Groq
     GROQ_TPM_LIMIT: int = 6000
     GROQ_FALLBACK_TPM_LIMIT: int = 12000
