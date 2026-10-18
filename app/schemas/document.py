@@ -1,17 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 from datetime import datetime
-
-
-class DocumentUploadResponse(BaseModel):
-    id: int
-    filename: str
-    doc_type: str
-    status: str
-    message: str
-
-    class Config:
-        from_attributes = True
 
 
 class DocumentResponse(BaseModel):
@@ -21,10 +10,11 @@ class DocumentResponse(BaseModel):
     doc_type: str
     status: str
     course_id: int
+    chunk_count: int = 0
+    error_message: Optional[str] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DocumentListResponse(BaseModel):

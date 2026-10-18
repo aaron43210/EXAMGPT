@@ -1,0 +1,53 @@
+name: Backend CI / Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: examgpt
+          POSTGRES_PASSWORD: examgpt
+          POSTGRES_DB: examgpt
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U examgpt" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - name: Unit + API tests (SQLite)
+        run: pytest -q
+      - name: Unit + API tests (Postgres)
+        env:
+          TEST_DATABASE_URL: postgresql://examgpt:examgpt@localhost:5432/examgpt
+        run: pytest -q
+      - name: Migrations apply on real Postgres
+        env:
+          DATABASE_URL: postgresql://examgpt:examgpt@localhost:5432/examgpt
+        run: alembic upgrade head && alembic downgrade base && alembic upgrade head
+      - name: Docker image builds
+        run: docker build -t examgpt-backend .
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Push to Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git push --force "https://aaronr43210:${HF_TOKEN}@huggingface.co/spaces/aaronr43210/examgpt-backend" HEAD:main

@@ -1,0 +1,20 @@
+name: Keep backend awake
+
+# HF free Spaces sleep after ~48h idle; Supabase free projects pause after 7 days.
+# /readyz touches the database, so this keeps both alive. (Use UptimeRobot as well:
+# GitHub disables scheduled workflows after 60 days without repository activity.)
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          for i in 1 2 3 4 5 6; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 https://aaronr43210-examgpt-backend.hf.space/readyz)
+            echo "attempt $i: $code"; [ "$code" = "200" ] && exit 0; sleep 30
+          done
+          exit 1

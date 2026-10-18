@@ -1,0 +1,12 @@
+.git
+.env
+.env.*
+**/__pycache__
+*.pyc
+*.db
+tests
+uploads
+vector_store
+EXAMGPT-Frontend
+.github
+.pytest_cache

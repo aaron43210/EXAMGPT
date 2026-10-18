@@ -1,48 +1,28 @@
+# Pinned for reproducible builds. Upgrade deliberately and re-run tests.
 # ── Core Framework ──────────────────────────────────────────
-fastapi
-uvicorn[standard]
-pydantic
-pydantic-settings
-python-multipart
-python-dotenv
-httpx
+fastapi==0.144.0
+uvicorn[standard]==0.54.0
+pydantic==2.14.1
+pydantic-settings==2.16.0
+email-validator==2.3.0
+python-multipart==0.0.32
 
 # ── Database ────────────────────────────────────────────────
-sqlalchemy
-psycopg2-binary
-alembic
+SQLAlchemy==2.1.5
+psycopg[binary]==3.3.6
+alembic==1.20.0
 
 # ── Auth ────────────────────────────────────────────────────
-PyJWT
-passlib[bcrypt]
-bcrypt
+PyJWT==2.15.1
+bcrypt==5.0.0
 
-# ── AI / LLM ───────────────────────────────────────────────
-langgraph
-langchain
-langchain-community
-langchain-core
-langchain-huggingface
-huggingface_hub
-langchain-groq
+# ── AI / LLM ────────────────────────────────────────────────
+groq==1.7.0
+langgraph==1.2.16
 
 # ── Retrieval ───────────────────────────────────────────────
-faiss-cpu
-rank_bm25
-sentence-transformers
+numpy==2.4.6
+fastembed==0.9.0
 
-# ── Document Processing ────────────────────────────────────
-pypdf
-
-# ── Infrastructure Clients ─────────────────────────────────
-redis
-neo4j
-supabase
-celery
-
-# ── Observability ──────────────────────────────────────────
-prometheus-fastapi-instrumentator
-
-# ── Rate Limiting ──────────────────────────────────────────
-slowapi
-requests
+# ── Document Processing ─────────────────────────────────────
+pypdf==6.21.1

@@ -1,9 +1,8 @@
 """
-Security module: JWT auth, password hashing, refresh token rotation, rate limiting.
+Security module: JWT auth and password hashing.
 """
 import uuid
-from datetime import datetime, timedelta
-from typing import Any, Union
+from datetime import datetime, timedelta, timezone
 import jwt
 from jwt.exceptions import PyJWTError
 import bcrypt
@@ -15,42 +14,33 @@ from app.core.config import get_settings
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
+# Used to equalize login timing when the username does not exist
+_DUMMY_HASH = bcrypt.hashpw(b"timing-equalizer", bcrypt.gensalt()).decode()
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+
+def verify_password(plain_password: str, hashed_password: str | None) -> bool:
+    try:
+        return bcrypt.checkpw(plain_password.encode("utf-8"), (hashed_password or _DUMMY_HASH).encode("utf-8"))
+    except ValueError:
+        return False
 
 
 def get_password_hash(password: str) -> str:
-    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
-def create_access_token(subject: Union[str, Any], expires_delta: timedelta = None) -> str:
+def create_access_token(user) -> str:
     settings = get_settings()
-    jti = str(uuid.uuid4())
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode = {"exp": expire, "sub": str(subject), "jti": jti, "type": "access"}
+    now = datetime.now(timezone.utc)
+    to_encode = {
+        "sub": str(user.id),
+        "ver": user.token_version or 0,
+        "jti": str(uuid.uuid4()),
+        "type": "access",
+        "iat": now,
+        "exp": now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+    }
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
-
-
-def create_refresh_token(user_id: int) -> tuple[str, str]:
-    """Create a refresh token and store its JTI in Redis. Returns (token, jti)."""
-    settings = get_settings()
-    jti = str(uuid.uuid4())
-    expire = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-    to_encode = {"exp": expire, "sub": str(user_id), "jti": jti, "type": "refresh"}
-    token = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
-
-    # Store in Redis
-    try:
-        from app.core.redis_client import store_refresh_token
-        store_refresh_token(jti, user_id, settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400)
-    except Exception:
-        pass  # Redis may not be available in dev
-
-    return token, jti
 
 
 def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)):
@@ -64,15 +54,18 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
+        payload = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM],
+            options={"require": ["exp", "sub", "type"]},
+        )
+        if payload.get("type") != "access":
             raise credentials_exception
-    except PyJWTError:
+        user_id = int(payload["sub"])
+    except (PyJWTError, ValueError, KeyError):
         raise credentials_exception
 
-    user = db.query(User).filter(User.username == username).first()
-    if user is None:
+    user = db.get(User, user_id)
+    if user is None or payload.get("ver", 0) != (user.token_version or 0):
         raise credentials_exception
     return user
 

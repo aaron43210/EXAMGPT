@@ -1,101 +1,54 @@
 """
-Node 7: Evaluation — critiques the draft answer for correctness, syllabus alignment, completeness.
-Conditional edge: on fail → loops back to answer_node (bounded ≤3 retries).
+Node 6: Evaluation — critiques the draft answer (optional, EVAL_ENABLED).
+Conditional edge: on fail → loops back to answer_node (bounded by MAX_EVAL_RETRIES).
 """
-import json
 import logging
 from app.agents.state import PipelineState
-from app.agents.llm_setup import get_llm
+from app.agents.llm_setup import chat, parse_json, LLMError
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-EVAL_PROMPT = """You are a strict academic quality evaluator for ExamGPT. Evaluate the following AI-generated answer.
+EVAL_PROMPT = """You are a strict academic reviewer. Judge the draft answer to a student's question for correctness, completeness and clarity.
 
-## Original Question
-{query}
+Question: {query}
 
-## Draft Answer
+Draft answer:
 {draft_answer}
 
-## Available Context Used
-Notes: {has_notes}
-PYQs: {has_pyqs}
-Knowledge Graph: {has_kg}
-Syllabus: {has_syllabus}
-
-## Evaluation Criteria
-1. **Correctness**: Is the answer factually accurate based on the provided context?
-2. **Completeness**: Does it fully address the question?
-3. **Syllabus Alignment**: Is the answer within the course scope?
-4. **Citations**: Does it reference source material?
-5. **Clarity**: Is it well-structured and easy to understand?
-6. **Relevance**: Is the answer relevant to the question?
-
-
-Respond with a JSON object:
-{{
-  "passed": true/false,
-  "score": 1-10,
-  "feedback": "specific feedback if failed, or 'Approved' if passed"
-}}
-
-Respond ONLY with the JSON."""
+Respond with JSON only: {{"passed": true or false, "score": integer 1-10, "feedback": "one or two sentences"}}"""
 
 
 def evaluation_node(state: PipelineState) -> dict:
-    logger.info("Evaluation node: critiquing answer")
-    llm = get_llm()
-
-    query = state.get("user_query", "")
-    draft_answer = state.get("draft_answer", "")
+    settings = get_settings()
     retry_count = state.get("retry_count", 0)
+    if not settings.EVAL_ENABLED:
+        return {"evaluation": {}, "retry_count": retry_count}
 
-    prompt = EVAL_PROMPT.format(
-        query=query,
-        draft_answer=draft_answer,
-        has_notes="Yes" if state.get("retrieved_notes") else "No",
-        has_pyqs="Yes" if state.get("related_pyqs") else "No",
-        has_kg="Yes" if state.get("kg_context") else "No",
-        has_syllabus="Yes" if state.get("syllabus_scope", {}).get("syllabus_available") else "No",
-    )
+    prompt = EVAL_PROMPT.format(query=state["user_query"], draft_answer=state.get("draft_answer", "")[:4000])
+    try:
+        data = parse_json(chat([{"role": "user", "content": prompt}], json_mode=True, max_tokens=200, temperature=0))
+    except LLMError as e:
+        # The answer already exists; never fail the request because the reviewer is unavailable
+        logger.warning("Evaluation skipped: %s", e)
+        data = None
 
-    response = llm.invoke(prompt)
-    # ChatHuggingFace returns an AIMessage object; extract string content
-    response_text = response.content if hasattr(response, "content") else str(response)
+    if not data:
+        return {"evaluation": {}, "retry_count": retry_count}
 
     try:
-        eval_data = json.loads(response_text.strip())
-        passed = eval_data.get("passed", True)
-        feedback = eval_data.get("feedback", "No feedback")
-        score = eval_data.get("score", 5)
-    except (json.JSONDecodeError, AttributeError):
-        # If LLM can't produce valid JSON, pass the answer through
-        passed = True
-        feedback = "Evaluation parsing failed — passing through."
+        score = max(1, min(10, int(data.get("score", 5))))
+    except (TypeError, ValueError):
         score = 5
-
-    evaluation = {
-        "passed": passed,
-        "score": score,
-        "feedback": feedback,
-    }
-
-    logger.info(f"Evaluation: passed={passed}, score={score}, retry={retry_count}")
-    return {
-        "evaluation": evaluation,
-        "retry_count": retry_count + (0 if passed else 1),
-    }
+    passed = bool(data.get("passed", True))
+    evaluation = {"passed": passed, "score": score, "feedback": str(data.get("feedback", ""))[:500]}
+    logger.info("Evaluation: passed=%s score=%s retry=%s", passed, score, retry_count)
+    return {"evaluation": evaluation, "retry_count": retry_count + (0 if passed else 1)}
 
 
 def should_retry(state: PipelineState) -> str:
-    """Conditional edge: retry answer if evaluation failed and under retry limit."""
     settings = get_settings()
-    evaluation = state.get("evaluation", {})
-    retry_count = state.get("retry_count", 0)
-
-    if not evaluation.get("passed", True) and retry_count < settings.MAX_EVAL_RETRIES:
-        logger.info(f"Retrying answer (attempt {retry_count + 1}/{settings.MAX_EVAL_RETRIES})")
+    evaluation = state.get("evaluation") or {}
+    if evaluation and not evaluation.get("passed", True) and state.get("retry_count", 0) <= settings.MAX_EVAL_RETRIES:
         return "retry"
-
     return "end"

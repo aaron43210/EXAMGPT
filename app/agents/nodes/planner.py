@@ -1,65 +1,29 @@
 """
-Node 1: Planner — formulates an execution plan from the user's query + course context.
+Node 1: Planner — builds the retrieval query. Rule-based (no LLM call) so each
+question spends its Groq budget on the answer itself.
 """
-import json
 import logging
+import re
 from app.agents.state import PipelineState
-from app.agents.llm_setup import get_llm
 
 logger = logging.getLogger(__name__)
 
-PLANNER_PROMPT = """You are a study planning agent for ExamGPT. Given a student's question about their course material, create a structured execution plan.
-
-The plan should identify:
-1. The main topics/concepts to look up
-2. Whether to check the syllabus for scope
-3. Whether to search notes for relevant content
-4. Whether to check previous year questions for patterns
-
-## Recent Chat History
-{chat_history}
-
-## Student Query
-{query}
-
-Respond with a JSON object:
-{{
-  "subtasks": ["list of specific subtasks to execute"],
-  "topics": ["list of key topics to search for"],
-  "check_syllabus": true/false,
-  "check_notes": true/false,
-  "check_pyqs": true/false
-}}
-
-Respond ONLY with the JSON, no other text."""
+_FOLLOW_UP = re.compile(
+    r"\b(this|that|these|those|it|its|they|them|more|above|previous|again|elaborate|explain further)\b",
+    re.IGNORECASE,
+)
 
 
 def planner_node(state: PipelineState) -> dict:
-    logger.info("Planner node: formulating plan")
-    llm = get_llm()
-    query = state["user_query"]
-
-    # Format chat history
+    query = state["user_query"].strip()
     history = state.get("chat_history", [])
-    if history:
-        history_str = "\n".join(
-            f"{m['role'].capitalize()}: {m['content']}" for m in history
-        )
+    last_user = next((m["content"] for m in reversed(history) if m["role"] == "user"), "")
+
+    # Short or pronoun-heavy follow-ups ("explain this more") need the previous topic
+    if last_user and (len(query.split()) <= 6 or _FOLLOW_UP.search(query)):
+        search_query = f"{query} {last_user}"
     else:
-        history_str = "No previous messages."
+        search_query = query
 
-    response = llm.invoke(PLANNER_PROMPT.format(query=query, chat_history=history_str))
-    response_text = response.content if hasattr(response, "content") else str(response)
-
-    try:
-        plan_data = json.loads(response_text.strip())
-        subtasks = plan_data.get("subtasks", [query])
-        topics = plan_data.get("topics", [])
-    except (json.JSONDecodeError, AttributeError):
-        subtasks = [query]
-        topics = []
-
-    plan = subtasks + [f"topic:{t}" for t in topics]
-    logger.info(f"Planner output: {len(plan)} subtasks")
-
-    return {"plan": plan}
+    logger.info("Planner: search query built (%d chars)", len(search_query))
+    return {"search_query": search_query}

@@ -1,19 +1,10 @@
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime
 
 
 class StudyPlanRequest(BaseModel):
-    days: int = 14
-    hours_per_day: float = 4.0
-
-
-class TopicPriority(BaseModel):
-    topic: str
-    priority: str  # high/medium/low
-    estimated_hours: float
-    pyq_frequency: int = 0
-    rationale: str = ""
+    days: int = Field(default=14, ge=1, le=90)
+    hours_per_day: float = Field(default=4.0, ge=0.5, le=16)
 
 
 class StudyPlanResponse(BaseModel):
@@ -22,5 +13,4 @@ class StudyPlanResponse(BaseModel):
     plan_data: dict
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
