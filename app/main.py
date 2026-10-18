@@ -142,14 +142,14 @@ def root():
     return {"message": "Welcome to ExamGPT API", "version": app.version}
 
 
-@app.get("/health")
-@app.get("/healthz")
+@app.api_route("/health", methods=["GET", "HEAD"])
+@app.api_route("/healthz", methods=["GET", "HEAD"])
 def health():
     """Liveness: the process is up."""
     return {"status": "ok"}
 
 
-@app.get("/readyz")
+@app.api_route("/readyz", methods=["GET", "HEAD"])
 def readiness():
     """Readiness: the database is reachable. Ping this to keep Space + Supabase awake."""
     from app.db.database import SessionLocal
