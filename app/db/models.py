@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, JSON, Enum as SQLEnum, Float
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, JSON, Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .database import Base
@@ -32,6 +32,8 @@ class User(Base):
     name = Column(String)
     password_hash = Column(String)
     role = Column(String, default=UserRole.student.value)
+    # Bumped on logout so every previously issued token stops working
+    token_version = Column(Integer, nullable=False, default=0, server_default="0")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     courses = relationship("Course", back_populates="owner")
@@ -58,12 +60,28 @@ class Document(Base):
     filename = Column(String)
     doc_type = Column(String, default=DocumentType.notes.value)
     status = Column(String, default=DocumentStatus.uploaded.value)
-    file_url = Column(String, nullable=True)  # Supabase Storage path
+    file_url = Column(String, nullable=True)  # legacy, unused
+    content_text = Column(Text, nullable=True)  # extracted text, used by study plans
+    error_message = Column(String, nullable=True)
+    chunk_count = Column(Integer, nullable=False, default=0, server_default="0")
     course_id = Column(Integer, ForeignKey("courses.id"))
     user_id = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     course = relationship("Course", back_populates="documents")
+
+
+class Chunk(Base):
+    """A retrievable piece of a document. Stored in the DB so it survives restarts."""
+    __tablename__ = "chunks"
+    id = Column(Integer, primary_key=True)
+    document_id = Column(Integer, ForeignKey("documents.id", ondelete="CASCADE"), index=True, nullable=False)
+    course_id = Column(Integer, ForeignKey("courses.id", ondelete="CASCADE"), index=True, nullable=False)
+    doc_type = Column(String, nullable=False)
+    source = Column(String, nullable=False)
+    chunk_index = Column(Integer, nullable=False)
+    content = Column(Text, nullable=False)
+    embedding = Column(JSON, nullable=True)  # list[float], normalized
 
 
 class PYQQuestion(Base):

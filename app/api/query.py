@@ -1,123 +1,101 @@
 """
 Query API routes — submit questions and retrieve chat history.
-Triggers the full 7-node LangGraph pipeline.
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.db.models import Course, ChatHistory, PipelineRun, User
 from app.schemas.query import ChatRequest, ChatResponse, ChatHistoryItem, ChatHistoryResponse
 from app.core.security import get_current_user
+from app.core.config import get_settings
+from app.core.rate_limit import limiter
+from app.api.deps import get_owned_course
 from app.agents.graph import run_examgpt_query
 
 router = APIRouter()
 
+HISTORY_TURNS = 3
+
 
 @router.post("/{course_id}/query", response_model=ChatResponse)
 def submit_query(
-    course_id: int,
     request: ChatRequest,
+    course: Course = Depends(get_owned_course),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Verify course ownership
-    course = db.query(Course).filter(
-        Course.id == course_id, Course.user_id == current_user.id
-    ).first()
-    if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
+    limiter.check(f"query:{current_user.id}", get_settings().RATE_LIMIT_QUERY_PER_MIN)
 
-    # Fetch last 5 messages as in-context chat history
-    recent_chats = db.query(ChatHistory).filter(
-        ChatHistory.course_id == course_id,
+    recent = db.query(ChatHistory).filter(
+        ChatHistory.course_id == course.id,
         ChatHistory.user_id == current_user.id,
-    ).order_by(ChatHistory.created_at.desc()).limit(5).all()
+    ).order_by(ChatHistory.created_at.desc(), ChatHistory.id.desc()).limit(HISTORY_TURNS).all()
 
     chat_history = []
-    for c in reversed(recent_chats):  # oldest first
+    for c in reversed(recent):  # oldest first
         chat_history.append({"role": "user", "content": c.query})
         chat_history.append({"role": "assistant", "content": c.response})
 
-    # Run the full pipeline
-    try:
-        result = run_examgpt_query(
-            query=request.query,
-            user_id=current_user.id,
-            course_id=course_id,
-            chat_history=chat_history,
-        )
-    except Exception as e:
-        error_str = str(e).lower()
-        if "402" in error_str or "payment" in error_str or "credits" in error_str or "depleted" in error_str or "400" in error_str or "not supported" in error_str or "invalid_request_error" in error_str:
-            raise HTTPException(
-                status_code=402,
-                detail="🚦 API Limit Exceeded. This application is for educational and demo purposes only. The monthly free credits on the AI model API key have been depleted."
-            )
-        elif "429" in error_str or "rate limit" in error_str or "model busy" in error_str or "too many requests" in error_str or "engine_overloaded" in error_str:
-            raise HTTPException(
-                status_code=503,
-                detail="🚦 The AI model has reached its rate limit. Please try again in a few minutes. ⚠️ Note: This model is provided for demo purposes only and runs on a free-tier API with limited capacity."
-            )
-        raise HTTPException(status_code=500, detail=f"Pipeline error: {str(e)}")
+    # LLMError propagates to the global handler, which returns a friendly 429/503
+    result = run_examgpt_query(
+        query=request.query,
+        user_id=current_user.id,
+        course_id=course.id,
+        chat_history=chat_history,
+    )
 
-    # Save chat history
     chat = ChatHistory(
         user_id=current_user.id,
-        course_id=course_id,
+        course_id=course.id,
         query=request.query,
         response=result["answer"],
-        citations_json=result.get("citations", []),
+        citations_json=result["citations"],
     )
     db.add(chat)
-    db.commit()
-    db.refresh(chat)
-
-    # Save pipeline run for observability
-    pipeline_run = PipelineRun(
+    db.flush()
+    db.add(PipelineRun(
         chat_id=chat.id,
-        course_id=course_id,
+        course_id=course.id,
         user_id=current_user.id,
-        retry_count=result.get("retry_count", 0),
-        total_latency_ms=result.get("latency_ms", 0),
-        status="completed" if not result.get("error") else "failed",
-    )
-    db.add(pipeline_run)
+        retry_count=result["retry_count"],
+        total_latency_ms=result["latency_ms"],
+        status="completed",
+    ))
     db.commit()
 
     return ChatResponse(
         response=result["answer"],
-        citations=result.get("citations", []),
-        evaluation=result.get("evaluation", {}),
-        retry_count=result.get("retry_count", 0),
-        latency_ms=result.get("latency_ms", 0),
+        citations=result["citations"],
+        evaluation=result["evaluation"],
+        retry_count=result["retry_count"],
+        latency_ms=result["latency_ms"],
     )
 
 
 @router.get("/{course_id}/chat-history", response_model=ChatHistoryResponse)
 def get_chat_history(
-    course_id: int,
+    course: Course = Depends(get_owned_course),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    course = db.query(Course).filter(
-        Course.id == course_id, Course.user_id == current_user.id
-    ).first()
-    if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
-
     chats = db.query(ChatHistory).filter(
-        ChatHistory.course_id == course_id,
+        ChatHistory.course_id == course.id,
         ChatHistory.user_id == current_user.id,
-    ).order_by(ChatHistory.created_at.desc()).limit(50).all()
+    ).order_by(ChatHistory.created_at.desc(), ChatHistory.id.desc()).limit(50).all()
 
-    messages = [
-        ChatHistoryItem(
-            id=c.id,
-            query=c.query,
-            response=c.response,
-            citations_json=c.citations_json,
-            created_at=c.created_at,
-        )
-        for c in chats
-    ]
+    messages = [ChatHistoryItem.model_validate(c) for c in chats]
     return ChatHistoryResponse(messages=messages, total=len(messages))
+
+
+@router.delete("/{course_id}/chat-history", status_code=204)
+def clear_chat_history(
+    course: Course = Depends(get_owned_course),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    chat_ids = [c for (c,) in db.query(ChatHistory.id).filter(
+        ChatHistory.course_id == course.id, ChatHistory.user_id == current_user.id)]
+    if chat_ids:
+        db.query(PipelineRun).filter(PipelineRun.chat_id.in_(chat_ids)).delete(synchronize_session=False)
+        db.query(ChatHistory).filter(ChatHistory.id.in_(chat_ids)).delete(synchronize_session=False)
+    db.commit()

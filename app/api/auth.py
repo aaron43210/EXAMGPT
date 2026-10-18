@@ -1,28 +1,30 @@
 """
-Auth API routes — register, login, refresh, logout, me.
+Auth API routes — register, login, logout, me.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.db.models import User
 from app.schemas.auth import UserCreate, UserResponse, Token
-from app.core.security import (
-    get_password_hash, verify_password, create_access_token,
-    create_refresh_token, get_current_user,
-)
+from app.core.security import get_password_hash, verify_password, create_access_token, get_current_user
 from app.core.config import get_settings
+from app.core.rate_limit import limiter, client_ip
 
 router = APIRouter()
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-def register(user_in: UserCreate, db: Session = Depends(get_db)):
-    # Check existing
-    if db.query(User).filter(User.username == user_in.username).first():
-        raise HTTPException(status_code=400, detail="Username already registered")
-    if db.query(User).filter(User.email == user_in.email).first():
-        raise HTTPException(status_code=400, detail="Email already registered")
+def register(user_in: UserCreate, request: Request, db: Session = Depends(get_db)):
+    limiter.check(f"register:{client_ip(request)}", get_settings().RATE_LIMIT_AUTH_PER_MIN)
+
+    taken = db.query(User).filter(
+        (func.lower(User.username) == user_in.username) | (func.lower(User.email) == user_in.email)
+    ).first()
+    if taken:
+        raise HTTPException(status_code=400, detail="Username or email is already registered")
 
     user = User(
         username=user_in.username,
@@ -32,35 +34,45 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
         role="student",
     )
     db.add(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Username or email is already registered")
     db.refresh(user)
     return user
 
 
 @router.post("/login", response_model=Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == form_data.username).first()
-    if not user or not verify_password(form_data.password, user.password_hash):
+def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    settings = get_settings()
+    identifier = form_data.username.strip().lower()[:254]
+    limiter.check(f"login:{client_ip(request)}", settings.RATE_LIMIT_AUTH_PER_MIN)
+    limiter.check(f"login-user:{identifier}", settings.RATE_LIMIT_AUTH_PER_MIN)
+
+    user = db.query(User).filter(
+        (func.lower(User.username) == identifier) | (func.lower(User.email) == identifier)
+    ).first()
+    # Always run bcrypt so response time doesn't reveal whether the user exists
+    password_ok = verify_password(form_data.password[:72], user.password_hash if user else None)
+    if not user or not password_ok:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    access_token = create_access_token(subject=user.username)
-    return Token(access_token=access_token, token_type="bearer")
-
-
-@router.post("/refresh", response_model=Token)
-def refresh_token(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Issue a new access token for an authenticated user."""
-    access_token = create_access_token(subject=current_user.username)
-    return Token(access_token=access_token, token_type="bearer")
+    return Token(
+        access_token=create_access_token(user),
+        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
 
 
 @router.post("/logout")
-def logout(current_user: User = Depends(get_current_user)):
-    """Logout — in production, revoke refresh token from Redis."""
+def logout(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Invalidate every token issued to this user."""
+    current_user.token_version = (current_user.token_version or 0) + 1
+    db.commit()
     return {"message": "Logged out successfully"}
 
 

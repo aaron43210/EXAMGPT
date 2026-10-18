@@ -10,3 +10,9 @@ __pycache__/
 .env
 *.pdf
 *.docx
+.env.*
+!.env.example
+*.db
+.pytest_cache/
+.models/
+EXAMGPT-Frontend/

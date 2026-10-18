@@ -1,66 +1,67 @@
-from app.retrieval.bm25_retriever import BM25Retriever
-from app.retrieval.faiss_retriever import FAISSRetriever
-from langchain_core.documents import Document
+"""
+Course-scoped hybrid retrieval over chunks stored in the database.
+BM25 keyword scores and embedding cosine scores are fused with Reciprocal Rank Fusion.
+Every query is filtered by course_id in SQL, so users only ever see their own course.
+"""
+import re
+import numpy as np
+from collections import Counter
+from sqlalchemy.orm import Session
+from app.db.models import Chunk
+from app.ingestion import embedder
+
+_TOKEN = re.compile(r"[a-z0-9]+")
+_RRF_K = 60
 
 
-class HybridRetriever:
-    def __init__(self):
-        self.bm25_retriever = BM25Retriever()
-        self.faiss_retriever = FAISSRetriever()
-        self.documents = []
-
-    def add_documents(self, docs: list[Document]):
-        if not docs:
-            return
-        self.documents.extend(docs)
-        texts = [doc.page_content for doc in docs]
-
-        # Rebuild BM25
-        self.bm25_retriever.build_index(
-            [d.page_content for d in self.documents], self.documents
-        )
-
-        # Build FAISS
-        embeddings = self.faiss_retriever.embedder.embed_documents(texts)
-        self.faiss_retriever.vector_store.add_embeddings(embeddings)
-
-    def retrieve(self, query: str, top_k: int = 4, doc_type_filter: str = None, course_id_filter: int = None) -> list[Document]:
-        """Retrieve documents with optional doc_type and course_id filtering."""
-        if not self.documents:
-            return []
-
-        # Get enough candidates to survive filtering
-        search_k = top_k * 10
-        bm25_indices, _ = self.bm25_retriever.search(query, search_k)
-        faiss_indices, _ = self.faiss_retriever.search(query, search_k)
-
-        fused_scores = {}
-        for rank, doc_idx in enumerate(bm25_indices):
-            fused_scores[doc_idx] = fused_scores.get(doc_idx, 0) + 1 / (rank + 60)
-
-        for rank, doc_idx in enumerate(faiss_indices):
-            if doc_idx != -1 and doc_idx < len(self.documents):
-                fused_scores[doc_idx] = fused_scores.get(doc_idx, 0) + 1 / (rank + 60)
-
-        sorted_indices = sorted(fused_scores.keys(), key=lambda x: fused_scores[x], reverse=True)
-        
-        results = []
-        for idx in sorted_indices:
-            if idx < len(self.documents):
-                doc = self.documents[idx]
-                
-                # Apply filters
-                if doc_type_filter and doc.metadata.get("doc_type", "notes") != doc_type_filter:
-                    continue
-                if course_id_filter is not None and doc.metadata.get("course_id") != course_id_filter:
-                    continue
-                    
-                results.append(doc)
-                if len(results) >= top_k:
-                    break
-                    
-        return results
+def _tokenize(text: str) -> list[str]:
+    return _TOKEN.findall(text.lower())
 
 
-# Global instance
-hybrid_retriever = HybridRetriever()
+def _bm25_scores(docs: list[list[str]], query: list[str], k1: float = 1.5, b: float = 0.75) -> np.ndarray:
+    """Okapi BM25 with Lucene's always-positive IDF (works for 1-document corpora)."""
+    n = len(docs)
+    avgdl = sum(len(d) for d in docs) / n or 1.0
+    df = Counter(t for d in docs for t in set(d))
+    scores = np.zeros(n)
+    for i, d in enumerate(docs):
+        tf = Counter(d)
+        norm = k1 * (1 - b + b * len(d) / avgdl)
+        for t in set(query):
+            f = tf.get(t)
+            if f:
+                idf = np.log(1 + (n - df[t] + 0.5) / (df[t] + 0.5))
+                scores[i] += idf * f * (k1 + 1) / (f + norm)
+    return scores
+
+
+def retrieve(db: Session, course_id: int, query: str, top_k: int = 4,
+             doc_type: str | None = None) -> list[Chunk]:
+    q = db.query(Chunk).filter(Chunk.course_id == course_id)
+    if doc_type:
+        q = q.filter(Chunk.doc_type == doc_type)
+    chunks = q.all()
+    if not chunks or not query.strip():
+        return []
+
+    fused = np.zeros(len(chunks))
+
+    query_tokens = _tokenize(query)
+    if query_tokens:
+        scores = _bm25_scores([_tokenize(c.content) for c in chunks], query_tokens)
+        for rank, idx in enumerate(np.argsort(-scores)):
+            if scores[idx] <= 0:
+                break
+            fused[idx] += 1.0 / (_RRF_K + rank)
+
+    with_vec = [i for i, c in enumerate(chunks) if c.embedding]
+    if with_vec:
+        qvec = embedder.embed_query(query)
+        if qvec is not None:
+            matrix = np.array([chunks[i].embedding for i in with_vec], dtype=np.float32)
+            sims = matrix @ qvec
+            for rank, j in enumerate(np.argsort(-sims)):
+                fused[with_vec[j]] += 1.0 / (_RRF_K + rank)
+
+    order = [i for i in np.argsort(-fused) if fused[i] > 0][:top_k]
+    return [chunks[i] for i in order]

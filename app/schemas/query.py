@@ -1,10 +1,18 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import Optional
 from datetime import datetime
 
 
 class ChatRequest(BaseModel):
-    query: str
+    query: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("query")
+    @classmethod
+    def strip_query(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Question cannot be blank")
+        return v
 
 
 class ChatResponse(BaseModel):
@@ -22,8 +30,7 @@ class ChatHistoryItem(BaseModel):
     citations_json: Optional[list[dict]] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ChatHistoryResponse(BaseModel):
