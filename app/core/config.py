@@ -41,12 +41,40 @@ class Settings(BaseSettings):
     # Comma-separated extra origins, e.g. Netlify deploy previews
     CORS_EXTRA_ORIGINS: str = ""
 
+    # Fallback when the primary model is rate-limited (separate Groq quota). Empty = none.
+    GROQ_FALLBACK_MODEL: str = "llama-3.3-70b-versatile"
+    # Client-side token budgets (tokens/minute) so we fail fast instead of hammering Groq
+    GROQ_TPM_LIMIT: int = 6000
+    GROQ_FALLBACK_TPM_LIMIT: int = 12000
+    # Model used as LLM-as-judge (online + offline evals). Different from the answer model
+    # to reduce self-preference bias.
+    JUDGE_MODEL: str = "llama-3.3-70b-versatile"
+
+    # ── Retrieval ───────────────────────────────────────────────
+    RERANKER_ENABLED: bool = True
+    RERANKER_MODEL: str = "Xenova/ms-marco-MiniLM-L-6-v2"
+    GRAPH_RAG_ENABLED: bool = True
+    BM25_ENABLED: bool = True  # ablation switch for the eval harness; keep on in production
+
+    # ── Semantic answer cache ───────────────────────────────────
+    # Repeated / paraphrased questions are answered from cache without an LLM call.
+    SEMANTIC_CACHE_ENABLED: bool = True
+    SEMANTIC_CACHE_THRESHOLD: float = 0.95  # cosine similarity between question embeddings
+    SEMANTIC_CACHE_MIN_CONFIDENCE: float = 0.5  # only cache answers backed by good retrieval
+    SEMANTIC_CACHE_TTL_HOURS: int = 168
+
     # ── Pipeline ────────────────────────────────────────────────
-    EVAL_ENABLED: bool = False  # costs a 2nd Groq call per question
+    EVAL_ENABLED: bool = False  # inline critic: costs a 2nd Groq call when confidence is low
     MAX_EVAL_RETRIES: int = 1
+    LOW_CONFIDENCE_THRESHOLD: float = 0.35
+    ROUTER_LLM_ENABLED: bool = False  # rules route most requests; LLM only for ambiguous ones
+    # Fraction of answers scored for groundedness in the background (online eval)
+    ONLINE_EVAL_SAMPLE_RATE: float = 0.1
 
     # ── Rate limits (requests per minute) ───────────────────────
     RATE_LIMIT_AUTH_PER_MIN: int = 10
+    # X-Forwarded-For can be spoofed, so per-IP limits get a global backstop
+    RATE_LIMIT_REGISTER_GLOBAL_PER_MIN: int = 30
     RATE_LIMIT_QUERY_PER_MIN: int = 10
     RATE_LIMIT_UPLOAD_PER_MIN: int = 5
 

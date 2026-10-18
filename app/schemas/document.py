@@ -12,6 +12,7 @@ class DocumentResponse(BaseModel):
     course_id: int
     chunk_count: int = 0
     error_message: Optional[str] = None
+    kg_status: Optional[str] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

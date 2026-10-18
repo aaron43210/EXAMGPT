@@ -8,13 +8,15 @@ import unicodedata
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File, Form, Path, status
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.db.models import Course, Chunk, Document, PYQQuestion, User, DocumentStatus, DocumentType
+from app.db.models import Course, Chunk, Document, User, DocumentStatus, DocumentType
 from app.schemas.document import DocumentResponse, DocumentListResponse
 from app.core.security import get_current_user
 from app.core.config import get_settings
 from app.core.rate_limit import limiter
 from app.api.deps import get_owned_course
-from app.ingestion.pipeline import process_document
+from app.ingestion.pipeline import process_document, rebuild_graph
+from app.knowledge import graph
+from app.retrieval import answer_cache
 
 router = APIRouter()
 
@@ -100,6 +102,26 @@ def delete_document(
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     db.query(Chunk).filter(Chunk.document_id == doc.id).delete(synchronize_session=False)
-    db.query(PYQQuestion).filter(PYQQuestion.document_id == doc.id).delete(synchronize_session=False)
+    graph.clear_document(db, doc.id)
+    answer_cache.invalidate(db, course.id)
     db.delete(doc)
     db.commit()
+
+
+@router.post("/{course_id}/documents/{document_id}/rebuild-graph", status_code=status.HTTP_202_ACCEPTED)
+def rebuild_document_graph(
+    background_tasks: BackgroundTasks,
+    document_id: int = Path(..., ge=1),
+    course: Course = Depends(get_owned_course),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Retry knowledge-graph extraction (e.g. after a Groq rate limit during upload)."""
+    limiter.check(f"upload:{current_user.id}", get_settings().RATE_LIMIT_UPLOAD_PER_MIN)
+    doc = db.query(Document).filter(Document.id == document_id, Document.course_id == course.id).first()
+    if not doc or doc.status != DocumentStatus.ready.value:
+        raise HTTPException(status_code=404, detail="Document not found or not ready")
+    doc.kg_status = "processing"
+    db.commit()
+    background_tasks.add_task(rebuild_graph, doc.id)
+    return {"message": "Rebuilding knowledge graph"}

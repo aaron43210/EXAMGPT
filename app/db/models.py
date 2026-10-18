@@ -1,6 +1,6 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, JSON, Float
+from sqlalchemy import Boolean, Column, Integer, String, Text, ForeignKey, DateTime, JSON, Float
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
+from sqlalchemy.sql import func, false as sa_false
 from .database import Base
 import enum
 
@@ -63,6 +63,7 @@ class Document(Base):
     file_url = Column(String, nullable=True)  # legacy, unused
     content_text = Column(Text, nullable=True)  # extracted text, used by study plans
     error_message = Column(String, nullable=True)
+    kg_status = Column(String, nullable=True)  # knowledge-graph build: ready | skipped | failed
     chunk_count = Column(Integer, nullable=False, default=0, server_default="0")
     course_id = Column(Integer, ForeignKey("courses.id"))
     user_id = Column(Integer, ForeignKey("users.id"))
@@ -80,8 +81,33 @@ class Chunk(Base):
     doc_type = Column(String, nullable=False)
     source = Column(String, nullable=False)
     chunk_index = Column(Integer, nullable=False)
+    page = Column(Integer, nullable=True)
     content = Column(Text, nullable=False)
     embedding = Column(JSON, nullable=True)  # list[float], normalized
+    # On Postgres with pgvector, an extra `embedding_vec vector(384)` column + HNSW index
+    # is managed by the migration and queried with raw SQL (see hybrid_retriever).
+
+
+class KGNode(Base):
+    """Knowledge-graph entity: a syllabus unit, topic or concept within one course."""
+    __tablename__ = "kg_nodes"
+    id = Column(Integer, primary_key=True)
+    course_id = Column(Integer, ForeignKey("courses.id", ondelete="CASCADE"), index=True, nullable=False)
+    document_id = Column(Integer, ForeignKey("documents.id", ondelete="CASCADE"), index=True, nullable=True)
+    type = Column(String, nullable=False)  # unit | topic | concept
+    name = Column(String, nullable=False)
+    key = Column(String, nullable=False, index=True)  # normalized name for de-duplication
+    description = Column(Text, nullable=True)
+
+
+class KGEdge(Base):
+    __tablename__ = "kg_edges"
+    id = Column(Integer, primary_key=True)
+    course_id = Column(Integer, ForeignKey("courses.id", ondelete="CASCADE"), index=True, nullable=False)
+    document_id = Column(Integer, ForeignKey("documents.id", ondelete="CASCADE"), index=True, nullable=True)
+    src_id = Column(Integer, ForeignKey("kg_nodes.id", ondelete="CASCADE"), index=True, nullable=False)
+    dst_id = Column(Integer, ForeignKey("kg_nodes.id", ondelete="CASCADE"), index=True, nullable=False)
+    type = Column(String, nullable=False)  # part_of | prerequisite_of | related_to
 
 
 class PYQQuestion(Base):
@@ -92,6 +118,8 @@ class PYQQuestion(Base):
     topic = Column(String)
     course_id = Column(Integer, ForeignKey("courses.id"), nullable=True)
     document_id = Column(Integer, ForeignKey("documents.id"), nullable=True)
+    marks = Column(Integer, nullable=True)
+    topic_node_id = Column(Integer, ForeignKey("kg_nodes.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -112,9 +140,12 @@ class EvaluationResult(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
     question_id = Column(Integer, ForeignKey("pyq_questions.id"), nullable=True)
+    course_id = Column(Integer, ForeignKey("courses.id"), nullable=True)
+    question_text = Column(Text, nullable=True)
     user_answer = Column(Text)
     feedback = Column(Text)
     score = Column(Integer)
+    max_score = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -137,8 +168,46 @@ class PipelineRun(Base):
     chat_id = Column(Integer, ForeignKey("chat_history.id"), nullable=True)
     course_id = Column(Integer, ForeignKey("courses.id"))
     user_id = Column(Integer, ForeignKey("users.id"))
-    node_timings_json = Column(JSON, nullable=True)
+    node_timings_json = Column(JSON, nullable=True)  # trace: [{"name", "ms", "tokens", "model"}]
     retry_count = Column(Integer, default=0)
     total_latency_ms = Column(Float, nullable=True)
     status = Column(String, default="running")
+    intent = Column(String, nullable=True)
+    model = Column(String, nullable=True)
+    prompt_version = Column(String, nullable=True)
+    prompt_tokens = Column(Integer, nullable=True)
+    completion_tokens = Column(Integer, nullable=True)
+    retrieval_confidence = Column(Float, nullable=True)
+    groundedness = Column(Float, nullable=True)  # 0-1, from the online judge (sampled)
+    guardrail_flags = Column(JSON, nullable=True)
+    cache_hit = Column(Boolean, nullable=False, default=False, server_default=sa_false())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class AnswerCache(Base):
+    """Semantic cache of grounded answers, per course. Invalidated when course content changes."""
+    __tablename__ = "answer_cache"
+    id = Column(Integer, primary_key=True)
+    course_id = Column(Integer, ForeignKey("courses.id", ondelete="CASCADE"), index=True, nullable=False)
+    intent = Column(String, nullable=False)
+    query = Column(Text, nullable=False)
+    query_key = Column(String, nullable=False, index=True)  # normalized text for exact matches
+    embedding = Column(JSON, nullable=True)
+    answer = Column(Text, nullable=False)
+    citations = Column(JSON, nullable=True)
+    confidence = Column(Float, nullable=True)
+    prompt_version = Column(String, nullable=True)
+    hits = Column(Integer, nullable=False, default=0, server_default="0")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class Feedback(Base):
+    """Thumbs up/down on an answer — the online eval signal."""
+    __tablename__ = "feedback"
+    id = Column(Integer, primary_key=True)
+    chat_id = Column(Integer, ForeignKey("chat_history.id", ondelete="CASCADE"), index=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    course_id = Column(Integer, ForeignKey("courses.id", ondelete="CASCADE"), index=True, nullable=False)
+    rating = Column(Integer, nullable=False)  # 1 or -1
+    comment = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

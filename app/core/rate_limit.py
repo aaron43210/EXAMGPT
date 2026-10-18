@@ -9,15 +9,25 @@ from fastapi import HTTPException, Request
 
 
 class RateLimiter:
+    SWEEP_EVERY = 1000
+    IDLE_SECONDS = 300
+
     def __init__(self):
         self._hits: dict[str, deque] = defaultdict(deque)
         self._lock = threading.Lock()
+        self._calls = 0
 
     def check(self, key: str, limit: int, window_seconds: int = 60) -> None:
         if limit <= 0:
             return
         now = time.monotonic()
         with self._lock:
+            self._calls += 1
+            if self._calls % self.SWEEP_EVERY == 0:
+                # Forget idle keys so attacker-chosen keys (usernames, IPs) can't grow memory forever
+                idle = [k for k, d in self._hits.items() if not d or d[-1] < now - self.IDLE_SECONDS]
+                for k in idle:
+                    del self._hits[k]
             hits = self._hits[key]
             while hits and hits[0] <= now - window_seconds:
                 hits.popleft()
@@ -33,6 +43,10 @@ class RateLimiter:
     def reset(self) -> None:
         with self._lock:
             self._hits.clear()
+            self._calls = 0
+
+    def tracked_keys(self) -> int:
+        return len(self._hits)
 
 
 limiter = RateLimiter()
