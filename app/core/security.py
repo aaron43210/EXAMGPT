@@ -1,32 +1,17 @@
 """
-Security module: JWT auth and password hashing.
+Security module: JWT auth.
 """
 import uuid
 from datetime import datetime, timedelta, timezone
 import jwt
 from jwt.exceptions import PyJWTError
-import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.core.config import get_settings
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
-
-# Used to equalize login timing when the username does not exist
-_DUMMY_HASH = bcrypt.hashpw(b"timing-equalizer", bcrypt.gensalt()).decode()
-
-
-def verify_password(plain_password: str, hashed_password: str | None) -> bool:
-    try:
-        return bcrypt.checkpw(plain_password.encode("utf-8"), (hashed_password or _DUMMY_HASH).encode("utf-8"))
-    except ValueError:
-        return False
-
-
-def get_password_hash(password: str) -> str:
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")  # tokenUrl only feeds Swagger UI
 
 
 def create_access_token(user) -> str:

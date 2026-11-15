@@ -14,7 +14,7 @@ alembic==1.20.0
 
 # ── Auth ────────────────────────────────────────────────────
 PyJWT==2.15.1
-bcrypt==5.0.0
+cryptography==46.0.3  # RS256 verification of Google ID tokens
 
 # ── AI / LLM ────────────────────────────────────────────────
 groq==1.7.0

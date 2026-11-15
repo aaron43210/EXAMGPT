@@ -153,13 +153,16 @@ def test_rate_limiter_forgets_idle_keys(monkeypatch):
 
 
 def test_global_registration_cap(client, monkeypatch):
+    import app.api.auth as auth_api
     monkeypatch.setattr(get_settings(), "RATE_LIMIT_REGISTER_GLOBAL_PER_MIN", 3)
+    monkeypatch.setattr(auth_api, "verify_google_token",
+                        lambda credential: {"email": f"{credential}@gmail.com", "name": "Bot"})
     codes = []
     for i in range(5):
-        r = client.post("/api/v1/auth/register", headers={"X-Forwarded-For": f"10.0.0.{i}"}, json={
-            "username": f"bot{i}", "email": f"bot{i}@example.com", "name": "Bot", "password": "Passw0rd!"})
+        r = client.post("/api/v1/auth/google", headers={"X-Forwarded-For": f"10.0.0.{i}"},
+                        json={"credential": f"bot{i}"})
         codes.append(r.status_code)
-    assert codes == [201, 201, 201, 429, 429]  # spoofed IPs don't bypass the global cap
+    assert codes == [200, 200, 200, 429, 429]  # spoofed IPs don't bypass the global cap on new accounts
 
 
 def test_readyz_reports_vector_index(client):

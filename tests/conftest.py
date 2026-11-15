@@ -11,6 +11,7 @@ os.environ.update({
     "RERANKER_ENABLED": os.getenv("TEST_EMBEDDINGS", "false"),
     "ONLINE_EVAL_SAMPLE_RATE": "0",
     "FRONTEND_URL": "https://examgpt.netlify.app",
+    "GOOGLE_CLIENT_ID": "test-client.apps.googleusercontent.com",
 })
 
 import pytest
@@ -102,14 +103,18 @@ def fake_llm(monkeypatch):
     return fake
 
 
-def register_and_login(client, username="alice", password="Passw0rd!"):
-    r = client.post("/api/v1/auth/register", json={
-        "username": username, "email": f"{username}@example.com", "name": username.title(), "password": password,
-    })
-    assert r.status_code == 201, r.text
-    r = client.post("/api/v1/auth/login", data={"username": username, "password": password})
-    assert r.status_code == 200, r.text
-    return {"Authorization": f"Bearer {r.json()['access_token']}"}
+def register_and_login(client, username="alice"):
+    """Create a user directly and return auth headers (Google sign-in is tested in test_auth)."""
+    from app.db.database import SessionLocal
+    from app.db.models import User
+    from app.core.security import create_access_token
+    with SessionLocal() as db:
+        user = User(username=username.lower(), email=f"{username.lower()}@example.com",
+                    name=username.title(), role="student")
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        return {"Authorization": f"Bearer {create_access_token(user)}"}
 
 
 @pytest.fixture

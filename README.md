@@ -150,8 +150,7 @@ The application will be accessible at `http://localhost:5173`.
 
 | Method | Endpoint | Description | Auth Required |
 | :--- | :--- | :--- | :---: |
-| `POST` | `/api/v1/auth/register` | Register a new user | No |
-| `POST` | `/api/v1/auth/login` | Authenticate and obtain JWT bearer token | No |
+| `POST` | `/api/v1/auth/google` | Exchange a Google ID token for a JWT bearer token (creates the account on first sign-in) | No |
 | `POST` | `/api/v1/auth/logout` | Invalidate all active user tokens | Yes |
 | `GET` | `/api/v1/courses/` | List all enrolled courses | Yes |
 | `POST` | `/api/v1/courses/` | Create a new course workspace | Yes |

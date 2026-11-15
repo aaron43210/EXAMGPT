@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 720
     ENABLE_DOCS: bool = False
 
+    # Google OAuth client ID (Google Cloud Console → Credentials → OAuth client, type "Web application")
+    GOOGLE_CLIENT_ID: str = ""
+
     # ── Database (Supabase Postgres in production) ──────────────
     DATABASE_URL: str = "sqlite:///./examgpt.db"
 
@@ -110,6 +113,8 @@ class Settings(BaseSettings):
             problems.append("DATABASE_URL must point to Postgres in production")
         if not self.GROQ_API_KEY:
             problems.append("GROQ_API_KEY is required")
+        if not self.GOOGLE_CLIENT_ID:
+            problems.append("GOOGLE_CLIENT_ID is required for Google sign-in")
         if not self.FRONTEND_URL:
             problems.append("FRONTEND_URL is required for CORS")
         if problems:

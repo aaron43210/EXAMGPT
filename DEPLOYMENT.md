@@ -25,6 +25,20 @@ Go to https://console.groq.com/keys, choose **Create API key**, and copy it (it 
 The free tier is rate-limited (about 6k tokens per minute on `llama-3.1-8b-instant`). When the
 limit is hit, the app shows a friendly "please wait a minute" message.
 
+## 2b. Google OAuth client
+
+Users sign in with Google only.
+
+1. Open https://console.cloud.google.com → **APIs & Services → OAuth consent screen**. Set it up as
+   **External**, add the app name and support email, then publish it (or add test users).
+2. Go to **Credentials → Create credentials → OAuth client ID → Web application**.
+3. Under **Authorized JavaScript origins**, add `https://examgpt.netlify.app` and `http://localhost:3000`.
+   No redirect URIs are needed.
+4. Copy the client ID (`....apps.googleusercontent.com`). The backend and the frontend both use it.
+
+Existing accounts that signed up with a password keep their data: signing in with Google using the
+same email address opens the same account.
+
 ## 3. Backend (Hugging Face Space)
 
 ### Secrets
@@ -37,6 +51,7 @@ In the Space, go to **Settings → Variables and secrets → New secret** and ad
 | `DATABASE_URL` | the Supabase URI from step 1 |
 | `GROQ_API_KEY` | `gsk_...` |
 | `FRONTEND_URL` | `https://examgpt.netlify.app` |
+| `GOOGLE_CLIENT_ID` | the client ID from step 2b |
 
 Optional **variables** (not secret):
 
@@ -50,7 +65,7 @@ Optional **variables** (not secret):
 Remove the old `HUGGINGFACE_API_KEY`, `REDIS_URL`, `NEO4J_*` and `SUPABASE_KEY` secrets. They are no longer used.
 
 The server **refuses to start** in production if `SECRET_KEY` is weak, `DATABASE_URL` is missing,
-or `GROQ_API_KEY` or `FRONTEND_URL` is missing. The reason appears in the Space's **Logs** tab.
+or `GROQ_API_KEY`, `FRONTEND_URL` or `GOOGLE_CLIENT_ID` is missing. The reason appears in the Space's **Logs** tab.
 
 ### Push the code
 
@@ -82,6 +97,7 @@ The first build takes about 5 minutes, because it downloads the embedding model 
 1. Go to **Netlify → Site configuration → Environment variables** and add
    `VITE_API_URL = https://aaronr43210-examgpt-backend.hf.space` (no trailing slash).
    The build fails on purpose if this is missing.
+   Also add `VITE_GOOGLE_CLIENT_ID` = the client ID from step 2b.
 2. Under **Build settings**, the base directory is the repo root. The build command and publish directory
    come from `netlify.toml` (`npm ci && npm run lint && npm test && npm run build`, publishing `dist`).
 3. Push to `main` on `aaron43210/EXAMGPT-Frontend`. Netlify builds and deploys automatically.
@@ -103,7 +119,7 @@ Content-Security-Policy only allows the frontend to call that one origin.
 ## 6. Post-deploy checklist
 
 - [ ] `/readyz` returns `ready` with `llm_configured: true`
-- [ ] Register, log in, create a course
+- [ ] Sign in with Google, create a course
 - [ ] Upload a PDF; its status goes `processing` → `ready`
 - [ ] Ask a question; the answer cites the PDF
 - [ ] Generate a study plan
