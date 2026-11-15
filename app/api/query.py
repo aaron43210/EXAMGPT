@@ -12,6 +12,7 @@ from app.core.rate_limit import limiter
 from app.api.deps import get_owned_course
 from app.agents import guardrails, tracing
 from app.agents.graph import run_examgpt_query
+from app.agents.llm_setup import bind_user
 from app.agents.runs import record_llm_failures, record_run, should_sample, score_run_in_background
 from app.retrieval import answer_cache
 
@@ -29,6 +30,7 @@ def submit_query(
     current_user: User = Depends(get_current_user),
 ):
     limiter.check(f"query:{current_user.id}", get_settings().RATE_LIMIT_QUERY_PER_MIN)
+    bind_user(current_user.id)
 
     recent = db.query(ChatHistory).filter(
         ChatHistory.course_id == course.id,

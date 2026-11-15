@@ -6,7 +6,7 @@ Runs after the upload request has returned, with its own DB session.
 """
 import logging
 from sqlalchemy.orm import Session
-from app.agents.llm_setup import LLMError
+from app.agents.llm_setup import LLMError, bind_user
 from app.db.database import SessionLocal
 from app.db.models import Chunk, Document, DocumentStatus
 from app.core.config import get_settings
@@ -82,6 +82,7 @@ def process_document(document_id: int, data: bytes) -> None:
         doc = db.get(Document, document_id)
         if doc is None:
             return
+        bind_user(doc.course.user_id)  # KG extraction counts against the uploader's token share
         try:
             pages = PDFLoader.extract_pages(data, max_pages=settings.MAX_PDF_PAGES)
             n = index_pages(db, doc, pages)
@@ -114,6 +115,7 @@ def rebuild_graph(document_id: int) -> None:
     try:
         doc = db.get(Document, document_id)
         if doc is not None:
+            bind_user(doc.course.user_id)
             build_graph(db, doc)
             db.commit()
     finally:

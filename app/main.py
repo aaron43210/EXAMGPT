@@ -28,6 +28,8 @@ logger = logging.getLogger(__name__)
 
 settings = get_settings()
 settings.validate_for_production()
+# Largest accepted request body: the upload cap plus room for multipart overhead
+MAX_BODY_BYTES = (settings.MAX_UPLOAD_SIZE_MB + 1) * 1024 * 1024
 
 
 def recover_interrupted_uploads() -> None:
@@ -88,7 +90,16 @@ app.add_middleware(
 async def request_context(request: Request, call_next):
     request_id = request.headers.get("x-request-id", "")[:64] or uuid.uuid4().hex[:16]
     request.state.request_id = request_id
-    response = await call_next(request)
+    if request.method == "POST":
+        length = request.headers.get("content-length")
+        if length is None and "chunked" in request.headers.get("transfer-encoding", "").lower():
+            response = JSONResponse(status_code=411, content={"detail": "Content-Length required"})
+        elif length is not None and (not length.isdigit() or int(length) > MAX_BODY_BYTES):
+            response = JSONResponse(status_code=413, content={"detail": "Request is too large"})
+        else:
+            response = await call_next(request)
+    else:
+        response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"

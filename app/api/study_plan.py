@@ -13,7 +13,7 @@ from app.core.config import get_settings
 from app.core.rate_limit import limiter
 from app.api.deps import get_owned_course
 from app.agents import tracing
-from app.agents.llm_setup import chat, parse_json
+from app.agents.llm_setup import bind_user, chat, parse_json
 from app.agents.runs import record_llm_failures, record_run
 from app.knowledge.graph import topic_map
 
@@ -127,6 +127,7 @@ def generate_study_plan(
     current_user: User = Depends(get_current_user),
 ):
     limiter.check(f"query:{current_user.id}", get_settings().RATE_LIMIT_QUERY_PER_MIN)
+    bind_user(current_user.id)
 
     docs = db.query(Document).filter(
         Document.course_id == course.id,

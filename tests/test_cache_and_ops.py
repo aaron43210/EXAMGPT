@@ -211,3 +211,34 @@ def test_pgvector_dense_search(client, auth, course, fake_llm, monkeypatch):
     with engine.begin() as conn:
         conn.execute(text("ALTER TABLE chunks DROP COLUMN embedding_vec"))
     hr.reset_index_cache()
+
+
+def test_per_user_token_share(fake_llm, monkeypatch):
+    from app.agents import llm_setup
+    monkeypatch.setattr(llm_setup, "get_available_models", lambda: [])
+    monkeypatch.setattr(get_settings(), "GROQ_USER_TPM_LIMIT", 150)
+    msg = [{"role": "user", "content": "hi"}]
+    try:
+        llm_setup.bind_user(1)
+        llm_setup.chat(msg, max_tokens=10)  # FakeLLM reports 120 tokens
+        with pytest.raises(llm_setup.LLMRateLimited):
+            llm_setup.chat(msg, max_tokens=100)  # user 1 is over their share
+        llm_setup.bind_user(2)
+        assert llm_setup.chat(msg, max_tokens=100) == "Mocked answer"  # other users unaffected
+    finally:
+        llm_setup.bind_user(None)
+
+
+def test_extracted_pdf_text_is_capped(monkeypatch):
+    from app.ingestion import pdf_loader
+    from tests.conftest import make_pdf
+    monkeypatch.setattr(pdf_loader, "MAX_EXTRACTED_CHARS", 30)
+    pages = pdf_loader.PDFLoader.extract_pages(make_pdf(NOTES))
+    assert sum(len(t) for _, t in pages) == 30
+
+
+def test_oversized_body_rejected_before_auth(client, monkeypatch):
+    import app.main as main
+    monkeypatch.setattr(main, "MAX_BODY_BYTES", 10)
+    r = client.post("/api/v1/courses/1/documents", files={"file": ("a.pdf", b"%PDF-" + b"x" * 100, "application/pdf")})
+    assert r.status_code == 413  # not 401: the body is refused before it is parsed

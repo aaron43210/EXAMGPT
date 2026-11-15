@@ -10,6 +10,7 @@ from collections import Counter
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.agents import tracing
+from app.agents.llm_setup import bind_user
 from app.agents.practice import generate_quiz, grade_answer, InvalidModelOutput
 from app.agents.runs import record_llm_failures, record_run
 from app.api.deps import get_owned_course
@@ -30,6 +31,7 @@ admin_router = APIRouter()
 def create_quiz(body: QuizRequest, course: Course = Depends(get_owned_course), db: Session = Depends(get_db),
                 current_user: User = Depends(get_current_user)):
     limiter.check(f"query:{current_user.id}", get_settings().RATE_LIMIT_QUERY_PER_MIN)
+    bind_user(current_user.id)
     trace = tracing.start_trace()
     try:
         with record_llm_failures(db, trace, course_id=course.id, user_id=current_user.id, intent="quiz_json"):
@@ -47,6 +49,7 @@ def create_quiz(body: QuizRequest, course: Course = Depends(get_owned_course), d
 def grade(body: GradeRequest, course: Course = Depends(get_owned_course), db: Session = Depends(get_db),
           current_user: User = Depends(get_current_user)):
     limiter.check(f"query:{current_user.id}", get_settings().RATE_LIMIT_QUERY_PER_MIN)
+    bind_user(current_user.id)
     trace = tracing.start_trace()
     try:
         with record_llm_failures(db, trace, course_id=course.id, user_id=current_user.id, intent="grade"):

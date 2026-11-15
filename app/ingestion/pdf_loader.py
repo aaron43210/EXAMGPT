@@ -5,6 +5,9 @@ from pypdf.errors import PdfReadError
 
 logger = logging.getLogger(__name__)
 
+# Compressed PDFs can expand hugely; stop extracting past this many characters
+MAX_EXTRACTED_CHARS = 2_000_000
+
 
 class PDFExtractionError(Exception):
     """Raised with a user-safe message when a PDF can't be processed."""
@@ -28,13 +31,18 @@ class PDFLoader:
             if len(reader.pages) > max_pages:
                 raise PDFExtractionError(f"PDF has more than {max_pages} pages.")
             pages = []
+            total = 0
             for number, page in enumerate(reader.pages, 1):
+                if total >= MAX_EXTRACTED_CHARS:
+                    break
                 try:
                     extracted = page.extract_text()
                 except Exception:
                     continue  # skip a single broken page
                 if extracted and extracted.strip():
-                    pages.append((number, extracted.replace("\x00", "")))
+                    text = extracted.replace("\x00", "")[:MAX_EXTRACTED_CHARS - total]
+                    total += len(text)
+                    pages.append((number, text))
         except PDFExtractionError:
             raise
         except (PdfReadError, ValueError, KeyError, TypeError) as e:

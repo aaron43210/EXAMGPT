@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     # Client-side token budgets (tokens/minute) so we fail fast instead of hammering Groq
     GROQ_TPM_LIMIT: int = 6000
     GROQ_FALLBACK_TPM_LIMIT: int = 12000
+    # Each user's share of those budgets, so one account can't starve everyone else
+    GROQ_USER_TPM_LIMIT: int = 6000
     # Model used as LLM-as-judge (online + offline evals). Different from the answer model
     # to reduce self-preference bias.
     JUDGE_MODEL: str = "llama-3.3-70b-versatile"

@@ -2,6 +2,7 @@
 LLM gateway. All model calls go through `chat()`, which provides:
   - typed errors (LLMError / LLMRateLimited / LLMNotConfigured) with user-safe messages
   - a client-side tokens-per-minute budget per model (fail fast on the free tier)
+  - a per-user tokens-per-minute share, so one account can't use up the shared budget
   - automatic fallback to GROQ_FALLBACK_MODEL when the primary model is rate-limited
   - token usage + latency recorded on the current trace (see tracing.py)
 """
@@ -11,6 +12,7 @@ import re
 import threading
 import time
 from collections import deque
+from contextvars import ContextVar
 from functools import lru_cache
 from app.agents import tracing
 from app.core.config import get_settings
@@ -70,6 +72,14 @@ class TokenBudget:
 
 
 budget = TokenBudget()
+
+# User whose request is being served; set per request / background job by bind_user()
+_current_user: ContextVar[int | None] = ContextVar("llm_user", default=None)
+
+
+def bind_user(user_id: int | None) -> None:
+    """Charge LLM calls made in the current context to this user's token share."""
+    _current_user.set(user_id)
 
 
 def estimate_tokens(messages: list[dict], max_tokens: int) -> int:
@@ -143,9 +153,13 @@ def chat(messages: list[dict], *, purpose: str = "general", json_mode: bool = Fa
         for live_model in get_available_models():
             if live_model not in seen and any(k in live_model.lower() for k in ("llama", "qwen", "mistral")):
                 seen.add(live_model)
-                candidates.append((live_model, 0))
+                candidates.append((live_model, settings.GROQ_FALLBACK_TPM_LIMIT))
 
     estimate = estimate_tokens(messages, max_tokens)
+    user = _current_user.get()
+    user_key = f"user:{user}" if user is not None else None
+    if user_key and not budget.has_room(user_key, estimate, settings.GROQ_USER_TPM_LIMIT):
+        raise LLMRateLimited("per-user token budget exhausted")
     last_error: LLMError = LLMRateLimited("token budget exhausted")
     for name, limit in candidates:
         if not budget.has_room(name, estimate, limit):
@@ -165,6 +179,8 @@ def chat(messages: list[dict], *, purpose: str = "general", json_mode: bool = Fa
             continue
         spent = (usage.get("prompt_tokens", 0) + usage.get("completion_tokens", 0)) or estimate
         budget.record(name, spent)
+        if user_key:
+            budget.record(user_key, spent)
         tracing.record_llm(purpose, name, usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0),
                            (time.perf_counter() - start) * 1000, prompt_version)
         return text
